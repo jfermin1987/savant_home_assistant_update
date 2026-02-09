@@ -9,7 +9,6 @@ require 'eventmachine'
 module HassMessageParsingMethods
   def new_data(js_data)
     return {} unless js_data['data']
-
     js_data['data']['new_state'] || js_data['data']
   end
 
@@ -46,13 +45,11 @@ module HassMessageParsingMethods
 
   def included_with_filter?(primary_key)
     return true if @filter.empty? || @filter == ['all']
-
     @filter.include?(primary_key)
   end
 
   def parse_state(message)
     eid = message['entity_id']
-
     update?("#{eid}_state", 'state', message['state']) if eid
 
     atr = message['attributes']
@@ -64,9 +61,7 @@ module HassMessageParsingMethods
 
   def update?(key, primary_key, value)
     return unless value && included_with_filter?(primary_key)
-
     value = 3 if primary_key == 'brightness' && [1, 2].include?(value)
-
     send_to_savant("#{key}===#{value}")
   end
 
@@ -84,7 +79,6 @@ module HassMessageParsingMethods
 
   def update_with_array(parent_key, msg_array)
     return update_hashed_array(parent_key, msg_array) if msg_array.first.is_a?(Hash)
-
     update?(parent_key, parent_key, msg_array.join(','))
   end
 
@@ -94,7 +88,6 @@ module HassMessageParsingMethods
       "#{k}:#{v}"
     end
     return unless included_with_filter?('attributes')
-
     update?("#{parent_key}_attributes", parent_key, arr.join(','))
   end
 
@@ -115,18 +108,11 @@ end
 
 module HassRequests
   def fan_on(entity_id, speed)
-    send_data(
-      type: :call_service, domain: :fan, service: :turn_on,
-      service_data: { speed: speed },
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :fan, service: :turn_on, service_data: { speed: speed }, target: { entity_id: entity_id })
   end
 
-  def fan_off(entity_id, _speed)
-    send_data(
-      type: :call_service, domain: :fan, service: :turn_off,
-      target: { entity_id: entity_id }
-    )
+  def fan_off(entity_id, _speed = nil)
+    send_data(type: :call_service, domain: :fan, service: :turn_off, target: { entity_id: entity_id })
   end
 
   def fan_set(entity_id, speed)
@@ -134,32 +120,19 @@ module HassRequests
   end
 
   def switch_on(entity_id)
-    send_data(
-      type: :call_service, domain: :light, service: :turn_on,
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :light, service: :turn_on, target: { entity_id: entity_id })
   end
 
   def switch_off(entity_id)
-    send_data(
-      type: :call_service, domain: :light, service: :turn_off,
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :light, service: :turn_off, target: { entity_id: entity_id })
   end
 
   def dimmer_on(entity_id, level)
-    send_data(
-      type: :call_service, domain: :light, service: :turn_on,
-      service_data: { brightness_pct: level },
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :light, service: :turn_on, service_data: { brightness_pct: level }, target: { entity_id: entity_id })
   end
 
   def dimmer_off(entity_id)
-    send_data(
-      type: :call_service, domain: :light, service: :turn_off,
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :light, service: :turn_off, target: { entity_id: entity_id })
   end
 
   def dimmer_set(entity_id, level)
@@ -167,152 +140,63 @@ module HassRequests
   end
 
   def shade_set(entity_id, level)
-    send_data(
-      type: :call_service, domain: :cover, service: :set_cover_position,
-      service_data: { position: level },
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :cover, service: :set_cover_position, service_data: { position: level }, target: { entity_id: entity_id })
   end
 
   def lock_lock(entity_id)
-    send_data(
-      type: :call_service, domain: :lock, service: :lock,
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :lock, service: :lock, target: { entity_id: entity_id })
   end
 
   def unlock_lock(entity_id)
-    send_data(
-      type: :call_service, domain: :lock, service: :unlock,
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :lock, service: :unlock, target: { entity_id: entity_id })
   end
 
   def open_garage_door(entity_id)
-    send_data(
-      type: :call_service, domain: :cover, service: :open_cover,
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :cover, service: :open_cover, target: { entity_id: entity_id })
   end
 
   def button_press(entity_id)
-    send_data(
-      type: :call_service, domain: :button, service: :press,
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :button, service: :press, target: { entity_id: entity_id })
   end
 
   def close_garage_door(entity_id)
-    send_data(
-      type: :call_service, domain: :cover, service: :close_cover,
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :cover, service: :close_cover, target: { entity_id: entity_id })
   end
 
   def toggle_garage_door(entity_id)
-    send_data(
-      type: :call_service, domain: :cover, service: :toggle,
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :cover, service: :toggle, target: { entity_id: entity_id })
   end
 
   def socket_on(entity_id)
-    send_data(
-      type: :call_service, domain: :switch, service: :turn_on,
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :switch, service: :turn_on, target: { entity_id: entity_id })
   end
 
   def socket_off(entity_id)
-    send_data(
-      type: :call_service, domain: :switch, service: :turn_off,
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :switch, service: :turn_off, target: { entity_id: entity_id })
   end
 
   def climate_set_hvac_mode(entity_id, mode)
-    send_data(
-      type: :call_service, domain: :climate, service: :set_hvac_mode,
-      service_data: { hvac_mode: mode },
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :climate, service: :set_hvac_mode, service_data: { hvac_mode: mode }, target: { entity_id: entity_id })
   end
   
   def climate_set_single(entity_id, level)
-    send_data(
-      type: :call_service, domain: :climate, service: :set_temperature,
-      service_data: { temperature: level },
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :climate, service: :set_temperature, service_data: { temperature: level }, target: { entity_id: entity_id })
   end
 
   def climate_set_low(entity_id, low_level)
-    send_data(
-      type: :call_service, domain: :climate, service: :set_temperature,
-      service_data: { target_temp_low: low_level },
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :climate, service: :set_temperature, service_data: { target_temp_low: low_level }, target: { entity_id: entity_id })
   end
 
   def climate_set_high(entity_id, high_level)
-    send_data(
-      type: :call_service, domain: :climate, service: :set_temperature,
-      service_data: { target_temp_high: high_level },
-      target: { entity_id: entity_id }
-    )
+    send_data(type: :call_service, domain: :climate, service: :set_temperature, service_data: { target_temp_high: high_level }, target: { entity_id: entity_id })
   end
-end
-
-def remote_on(entity_id)
-  send_data(
-    type: :call_service, domain: :remote, service: :turn_on,
-    target: { entity_id: entity_id }
-  )
-end
-
-def remote_off(entity_id)
-  send_data(
-    type: :call_service, domain: :remote, service: :turn_off,
-    target: { entity_id: entity_id }
-  )
-end
-
-def remote_send_command(entity_id)
-  send_data(
-    type: :call_service, domain: :remote, service: :send_command,
-    service_data: { command: command },
-    target: { entity_id: entity_id }
-  )
-end
-
-def media_player_on(entity_id)
-  send_data(
-    type: :call_service, domain: :media_player, service: :turn_on,
-    target: { entity_id: entity_id }
-  )
-end
-
-def media_player_off(entity_id)
-  send_data(
-    type: :call_service, domain: :media_player, service: :turn_off,
-    target: { entity_id: entity_id }
-  )
-end
-
-def mediaplayer_send_command(entity_id)
-  send_data(
-    type: :call_service, domain: :remote, service: :send_command,
-    service_data: { command: command },
-    target: { entity_id: entity_id }
-  )
 end
 
 class Hass
   include HassMessageParsingMethods
   include HassRequests
 
-  POSTFIX = "
-"
+  POSTFIX = "\n"
   STATE_FILE = ENV['STATE_FILE'] || '/data/savant_hass_proxy_state.json'
   HA_PING_INTERVAL = (ENV['HA_PING_INTERVAL'] || '30').to_i
   SAVANT_HELLO_INTERVAL = (ENV['SAVANT_HELLO_INTERVAL'] || '10').to_i
@@ -332,6 +216,7 @@ class Hass
     @id = 0
     @ws_queue = []
     @reconnect_delay = RECONNECT_MIN
+    @ha_ping_timer_started = false
 
     @em_mutex = Mutex.new
     @em_thread = nil
@@ -343,6 +228,19 @@ class Hass
     ensure_em_running
     start_savant_io
     connect_websocket
+  end
+
+  # Métodos Públicos
+  def shutdown?
+    @shutdown
+  end
+
+  def shutdown!
+    return if @shutdown
+    @shutdown = true
+    p([:info, :shutting_down_hass_instance])
+    begin; @hass_ws&.close; rescue; end
+    begin; @client&.close; rescue; end
   end
 
   def subscribe_entities(*entity_id)
@@ -357,13 +255,8 @@ class Hass
 
   private
 
-  # ---------------------------
-  # Persistence (survive HA/Savant reboots)
-  # ---------------------------
   def load_state
-    JSON.parse(File.read(STATE_FILE))
-  rescue
-    { 'filter' => nil, 'entities' => [] }
+    JSON.parse(File.read(STATE_FILE)) rescue { 'filter' => nil, 'entities' => [] }
   end
 
   def save_state
@@ -375,7 +268,6 @@ class Hass
   end
 
   def apply_persisted_defaults
-    # If Savant hasn't set a filter yet, use last known one
     if (@filter.nil? || @filter.empty? || @filter == ['all']) && @persisted['filter'].is_a?(Array) && !@persisted['filter'].empty?
       @filter = @persisted['filter']
       p([:info, :filter_restored, @filter])
@@ -383,8 +275,7 @@ class Hass
   end
 
   def persisted_entities
-    arr = @persisted['entities']
-    arr.is_a?(Array) ? arr : []
+    @persisted['entities'].is_a?(Array) ? @persisted['entities'] : []
   end
 
   def persist_filter(params)
@@ -397,9 +288,6 @@ class Hass
     save_state
   end
 
-  # ---------------------------
-  # Savant IO + Heartbeat
-  # ---------------------------
   def start_savant_io
     @last_savant_rx = Time.now
     send_to_savant('hello,proxy=ha_savant,proto=1')
@@ -437,23 +325,17 @@ class Hass
   def start_savant_heartbeat
     em_add_periodic_timer(SAVANT_HELLO_INTERVAL) do
       next if @shutdown
-      # If Savant stays connected but doesn't send its config after reboot,
-      # this 'hello' nudges it (and helps detect half-open sockets).
       send_to_savant('hello,proxy=ha_savant,proto=1')
     end
   end
 
   def send_to_savant(*message)
-    return unless message
+    return unless message && @client && !@client.closed?
     @client.puts(map_message(message).join)
   rescue => e
     p([:error, :to_savant_failed, e.message])
   end
 
-  # ---------------------------
-  # Home Assistant WebSocket (auto reconnect + queue)
-  # ---------------------------
-  
   def em_add_timer(seconds, &blk)
     ensure_em_running
     EM.add_timer(seconds, &blk)
@@ -464,26 +346,13 @@ class Hass
     EM.add_periodic_timer(seconds, &blk)
   end
 
-  def em_schedule(&blk)
-    ensure_em_running
-    EM.schedule(&blk)
-  end
-
-def ensure_em_running
+  def ensure_em_running
     return if EM.reactor_running?
-
     @em_mutex.synchronize do
       return if EM.reactor_running?
-      @em_thread ||= Thread.new do
-        EM.run
-      end
+      @em_thread ||= Thread.new { EM.run }
     end
-
-    # Spin-wait briefly for reactor
-    50.times do
-      break if EM.reactor_running?
-      sleep 0.05
-    end
+    50.times { break if EM.reactor_running?; sleep 0.05 }
   end
 
   def connect_websocket
@@ -493,15 +362,11 @@ def ensure_em_running
   def start_ws
     return if @shutdown
     @ha_authed = false
-    ws_url = @address
-    @hass_ws = Faye::WebSocket::Client.new(ws_url)
+    @hass_ws = Faye::WebSocket::Client.new(@address)
 
     @hass_ws.on :open do |_event|
       p([:debug, :ws_connected])
       @reconnect_delay = RECONNECT_MIN
-
-    @em_mutex = Mutex.new
-    @em_thread = nil
     end
 
     @hass_ws.on :message do |event|
@@ -556,31 +421,30 @@ def ensure_em_running
     end
   end
 
-  # ---------------------------
-  # Protocol handling
-  # ---------------------------
   def hass_request?(cmd)
-    cmd = cmd.to_sym
     HassRequests.instance_methods(false).include?(cmd.to_sym)
   end
 
   def from_savant(req)
     cmd, *params = req.split(',')
-    if cmd == 'pong'
+    case cmd
+    when 'pong'
       p([:debug, :savant_pong])
-    elsif cmd == 'subscribe_events'
+    when 'subscribe_events'
       send_json(type: 'subscribe_events')
-    elsif cmd == 'subscribe_entity'
+    when 'subscribe_entity'
       entities = params.flatten.compact.reject(&:empty?)
       persist_entities(entities) unless entities.empty?
       subscribe_entities(entities)
-    elsif cmd == 'state_filter'
+    when 'state_filter'
       @filter = params
       persist_filter(@filter)
-    elsif hass_request?(cmd)
-      send(cmd, *params)
     else
-      p([:error, [:unknown_cmd, cmd, req]])
+      if hass_request?(cmd)
+        send(cmd, *params)
+      else
+        p([:error, [:unknown_cmd, cmd, req]])
+      end
     end
   end
 
@@ -588,23 +452,17 @@ def ensure_em_running
     message = JSON.parse(data) rescue nil
     return unless message
     return p([:error, [:request_failed, message]]) if message['success'] == false
-
-    p([:debug, [:handling, message]])
     handle_hash(message)
   end
 
   def after_auth_ok
     p([:info, :ha_ready])
     start_ha_ping
-
-    # If Savant hasn't pushed subscribe_entity yet after a reboot,
-    # restore the last known set so state starts flowing immediately.
     ents = persisted_entities
     if !ents.empty?
       p([:info, :restoring_subscriptions, ents.length])
       subscribe_entities(ents)
     end
-
     flush_ws_queue
     send_to_savant('ready,ha=ok')
   end
@@ -623,7 +481,6 @@ def ensure_em_running
 
   def send_auth
     auth_message = { type: 'auth', access_token: @token }.to_json
-    p([:debug, [:sending_auth]])
     safe_ws_send(auth_message)
   end
 
@@ -631,8 +488,6 @@ def ensure_em_running
     @id += 1
     hash['id'] = @id
     json = hash.to_json
-    p([:debug, [:send, json]])
-
     if @ha_authed && can_send_ws?
       safe_ws_send(json)
     else
@@ -650,13 +505,9 @@ def ensure_em_running
     end
   end
 
-  # ---------------------------
-  # Socket keepalive (Linux)
-  # ---------------------------
   def setup_tcp_keepalive(sock)
     sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_KEEPALIVE, true)
     if Socket.const_defined?(:IPPROTO_TCP)
-      # Best-effort: these constants may not exist on all Ruby builds/platforms.
       sock.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_KEEPIDLE, 30) if Socket.const_defined?(:TCP_KEEPIDLE)
       sock.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_KEEPINTVL, 10) if Socket.const_defined?(:TCP_KEEPINTVL)
       sock.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_KEEPCNT, 3) if Socket.const_defined?(:TCP_KEEPCNT)
@@ -665,26 +516,6 @@ def ensure_em_running
     p([:debug, :keepalive_not_set, e.message])
   end
 
-    def shutdown?
-    @shutdown
-  end
-
-def shutdown!
-    return if @shutdown
-    @shutdown = true
-    begin
-      @hass_ws&.close
-    rescue
-    end
-    begin
-      @client&.close
-    rescue
-    end
-  end
-
-  # ---------------------------
-  # Existing helpers (unchanged)
-  # ---------------------------
   def map_message(message)
     Array(message).map do |m|
       next unless m
@@ -693,37 +524,32 @@ def shutdown!
   end
 end
 
-# TCP Server: single-client oriented (close prior client on new connect) + restart-safe
+# TCP Server
 Thread.abort_on_exception = true
 
 def start_tcp_server(hass_address, token, port = 8080)
   server = TCPServer.new(port)
   p([:info, :server_started, port])
-
-  current = nil
+  current_hass = nil
 
   loop do
     client = server.accept
     p([:info, :client_connected, client.peeraddr])
 
-    # If a prior Savant connection exists, close it (avoid half-open multi-clients)
-    begin
-      current&.close
-    rescue
-    end
+    # Cerramos la instancia anterior si existe
+    current_hass.shutdown! if current_hass
 
     Thread.new do
       begin
-        current = client
-        hass_instance = Hass.new(hass_address, token, client)
+        current_hass = Hass.new(hass_address, token, client)
         p([:info, :hass_instance_created])
-        sleep 0.5 until hass_instance.shutdown?
+        
+        # Bucle de espera mientras la instancia esté activa
+        sleep 1 until current_hass.shutdown?
       rescue => e
-        p([:error, :client_error, e.message])
-        begin
-          client.close
-        rescue StandardError
-        end
+        p([:error, :client_thread_error, e.message, e.backtrace[0..2]])
+      ensure
+        client.close rescue nil
       end
     end
   end
