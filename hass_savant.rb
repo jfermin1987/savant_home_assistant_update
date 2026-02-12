@@ -6,7 +6,6 @@ require 'json'
 require 'faye/websocket'
 require 'eventmachine'
 
-# Módulos de parsing y peticiones (Lógica preservada intacta)
 module HassMessageParsingMethods
   def new_data(js_data)
     return {} unless js_data['data']
@@ -16,16 +15,19 @@ module HassMessageParsingMethods
   def parse_event(js_data)
     return entities_changed(js_data['c']) if js_data.keys == ['c']
     return entities_changed(js_data['a']) if js_data.keys == ['a']
+
     case js_data['event_type']
     when 'state_changed' then parse_state(new_data(js_data))
     when 'call_service' then parse_service(new_data(js_data))
-    else [:unknown, js_data['event_type']]
+    else
+      [:unknown, js_data['event_type']]
     end
   end
 
   def entities_changed(entities)
     entities.each do |entity, state|
       state = state['+'] if state.key?('+')
+      p([:debug, ([:changed, entity, state])])
       attributes = state['a']
       value = state['s']
       update?("#{entity}_state", 'state', value) if value
@@ -67,7 +69,8 @@ module HassMessageParsingMethods
       case e
       when Hash then update_with_hash(key, e)
       when Array then update_with_array(key, e)
-      else update?(key, i, e)
+      else
+        update?(key, i, e)
       end
     end
   end
@@ -87,30 +90,45 @@ module HassMessageParsingMethods
   end
 
   def parse_result(js_data)
+    p([:debug, ([:jsdata, js_data])])
     res = js_data['result']
     return unless res
+    p([:debug, ([:parsing, res.length])])
     return parse_state(res) unless res.is_a?(Array)
-    res.each { |e| parse_state(e) }
+    res.each do |e|
+      parse_state(e)
+    end
   end
 end
 
 module HassRequests
-  def fan_set(entity_id, speed)
-    service = speed.to_i.zero? ? :turn_off : :turn_on
-    data = speed.to_i.zero? ? {} : { speed: speed }
-    send_data(type: :call_service, domain: :fan, service: service, service_data: data, target: { entity_id: entity_id })
+  def fan_on(entity_id, speed)
+    send_data(type: :call_service, domain: :fan, service: :turn_on, service_data: { speed: speed }, target: { entity_id: entity_id })
   end
-  def switch_on(e); send_data(type: :call_service, domain: :light, service: :turn_on, target: { entity_id: e }); end
-  def switch_off(e); send_data(type: :call_service, domain: :light, service: :turn_off, target: { entity_id: e }); end
-  def dimmer_set(e, v); v.to_i.zero? ? switch_off(e) : send_data(type: :call_service, domain: :light, service: :turn_on, service_data: { brightness_pct: v }, target: { entity_id: e }); end
-  def shade_set(e, v); send_data(type: :call_service, domain: :cover, service: :set_cover_position, service_data: { position: v }, target: { entity_id: e }); end
-  def lock_lock(e); send_data(type: :call_service, domain: :lock, service: :lock, target: { entity_id: e }); end
-  def unlock_lock(e); send_data(type: :call_service, domain: :lock, service: :unlock, target: { entity_id: e }); end
-  def socket_on(e); send_data(type: :call_service, domain: :switch, service: :turn_on, target: { entity_id: e }); end
-  def socket_off(e); send_data(type: :call_service, domain: :switch, service: :turn_off, target: { entity_id: e }); end
-  def button_press(e); send_data(type: :call_service, domain: :button, service: :press, target: { entity_id: e }); end
-  def open_garage_door(e); send_data(type: :call_service, domain: :cover, service: :open_cover, target: { entity_id: e }); end
-  def close_garage_door(e); send_data(type: :call_service, domain: :cover, service: :close_cover, target: { entity_id: e }); end
+  def fan_off(entity_id, _speed = nil)
+    send_data(type: :call_service, domain: :fan, service: :turn_off, target: { entity_id: entity_id })
+  end
+  def fan_set(entity_id, speed)
+    speed.to_i.zero? ? fan_off(entity_id) : fan_on(entity_id, speed)
+  end
+  def switch_on(entity_id)
+    send_data(type: :call_service, domain: :light, service: :turn_on, target: { entity_id: entity_id })
+  end
+  def switch_off(entity_id)
+    send_data(type: :call_service, domain: :light, service: :turn_off, target: { entity_id: entity_id })
+  end
+  def dimmer_set(entity_id, level)
+    level.to_i.zero? ? switch_off(entity_id) : send_data(type: :call_service, domain: :light, service: :turn_on, service_data: { brightness_pct: level }, target: { entity_id: entity_id })
+  end
+  def shade_set(entity_id, level)
+    send_data(type: :call_service, domain: :cover, service: :set_cover_position, service_data: { position: level }, target: { entity_id: entity_id })
+  end
+  def socket_on(entity_id)
+    send_data(type: :call_service, domain: :switch, service: :turn_on, target: { entity_id: entity_id })
+  end
+  def socket_off(entity_id)
+    send_data(type: :call_service, domain: :switch, service: :turn_off, target: { entity_id: entity_id })
+  end
 end
 
 class Hass
@@ -119,6 +137,7 @@ class Hass
 
   POSTFIX = "\n"
   STATE_FILE = '/data/savant_hass_proxy_state.json'
+  SAVANT_HELLO_INTERVAL = 10
 
   def initialize(hass_address, token, client)
     @address, @token, @client = hass_address, token, client
@@ -128,6 +147,9 @@ class Hass
     @ws_queue = []
     @filter = ['all']
     
+    @persisted = load_state
+    apply_persisted_defaults
+
     ensure_em_running
     start_savant_io
     connect_websocket
@@ -138,22 +160,43 @@ class Hass
 
   private
 
+  def load_state; JSON.parse(File.read(STATE_FILE)) rescue { 'filter' => nil, 'entities' => [] }; end
+  def save_state; File.write(STATE_FILE, @persisted.to_json) rescue nil; end
+
+  def apply_persisted_defaults
+    if (@filter.nil? || @filter == ['all']) && @persisted['filter'].is_a?(Array)
+      @filter = @persisted['filter']
+    end
+  end
+
   def start_savant_io
     send_to_savant('hello,proxy=ha_savant,proto=1')
     listen_to_savant
+    start_savant_heartbeat
   end
 
   def listen_to_savant
     Thread.new do
-      while !@shutdown && (line = @client.gets)
-        from_savant(line.chomp)
+      begin
+        while !@shutdown && (line = @client&.gets)
+          from_savant(line.chomp)
+        end
+      rescue IOError, SystemCallError
+        # Manejo silencioso de desconexión
+      ensure
+        shutdown!
       end
-      shutdown!
+    end
+  end
+
+  def start_savant_heartbeat
+    EM.add_periodic_timer(SAVANT_HELLO_INTERVAL) do
+      send_to_savant('hello,proxy=ha_savant,proto=1') unless @shutdown
     end
   end
 
   def send_to_savant(msg)
-    return if @shutdown || @client.closed?
+    return if @shutdown || @client&.closed?
     @client.puts("#{msg}#{POSTFIX}")
   rescue
     shutdown!
@@ -169,6 +212,7 @@ class Hass
       @hass_ws = Faye::WebSocket::Client.new(@address)
       @hass_ws.on(:message) { |e| handle_message(e.data) }
       @hass_ws.on(:close) { shutdown! }
+      @hass_ws.on(:open) { p [:ws_open] }
     end
   end
 
@@ -177,8 +221,9 @@ class Hass
     case cmd
     when 'subscribe_events' then send_json(type: 'subscribe_events')
     when 'subscribe_entity' then send_json(type: 'subscribe_entities', entity_ids: params)
-    when 'state_filter' then @filter = params
-    else send(cmd, *params) if respond_to?(cmd)
+    when 'state_filter' then @filter = params; save_state
+    else
+      send(cmd, *params) if respond_to?(cmd)
     end
   end
 
@@ -189,6 +234,9 @@ class Hass
     when 'auth_ok' 
       @ha_authed = true
       send_to_savant('ready,ha=ok')
+      # Restaurar suscripciones si existen
+      ents = @persisted['entities'] || []
+      send_json(type: 'subscribe_entities', entity_ids: ents) unless ents.empty?
     when 'event' then parse_event(msg['event'])
     when 'result' then parse_result(msg)
     end
@@ -203,12 +251,12 @@ class Hass
   def send_data(**data); send_json(data); end
 end
 
-# TCP Server Corregido para evitar colisiones
+# TCP Server Corregido
 Thread.abort_on_exception = true
 def start_tcp_server(hass_address, token, port = 8080)
   server = TCPServer.new(port)
   server.setsockopt(Socket::SOL_SOCKET, Socket::SO_REUSEADDR, 1)
-  puts "Server started on port #{port}"
+  puts "Proxy iniciado en puerto #{port}"
   
   @active_instance = nil
 
@@ -216,8 +264,12 @@ def start_tcp_server(hass_address, token, port = 8080)
     client = server.accept
     client.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1)
     
-    # Cerramos la instancia previa antes de aceptar la nueva para evitar el parpadeo
-    @active_instance.shutdown! if @active_instance
+    # Matar instancia anterior limpiamente antes de aceptar la nueva
+    if @active_instance
+      @active_instance.shutdown!
+      sleep 0.1
+    end
+    
     @active_instance = Hass.new(hass_address, token, client)
   end
 end
