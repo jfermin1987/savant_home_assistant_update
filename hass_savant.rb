@@ -212,22 +212,29 @@ class HassCore
 
   # ----------- Savant attach/detach -----------
   def attach_client(sock)
-    setup_tcp_keepalive(sock)
+  setup_tcp_keepalive(sock)
 
-    old = nil
-    @client_mutex.synchronize do
-      old = @client
-      @client = sock
-    end
-    safe_close_socket(old) if old
-
-    # IMPORTANT: send only "parseable" lines for your XML (OtherUpdate uses ===)
-    send_line("hello===1")
-    send_line("ready===ok") if @ha_authed
-    replay_cache
-
-    start_client_reader_thread(sock)
+  # Debounce: si Savant abre sockets en ráfaga, evita churn
+  now = Time.now.to_f
+  @last_attach ||= 0.0
+  if (now - @last_attach) < 0.25
+    safe_close_socket(sock)
+    return
   end
+  @last_attach = now
+
+  old = nil
+  @client_mutex.synchronize do
+    old = @client
+    @client = sock
+  end
+  safe_close_socket(old) if old
+
+  send_line("hello===1")
+  send_line("ready===ok") if @ha_authed
+  replay_cache
+  start_client_reader_thread(sock)
+end
 
   def detach_client
     @client_mutex.synchronize { detach_client_nolock }
