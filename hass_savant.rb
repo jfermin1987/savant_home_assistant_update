@@ -117,28 +117,21 @@ module HassRequests
     speed.to_i.zero? ? fan_off(entity_id) : fan_on(entity_id, speed)
   end
 
-  def switch_on(entity_id)
-    send_data(type: :call_service, domain: :light, service: :turn_on,
-              target: { entity_id: entity_id })
-  end
-
-  def switch_off(entity_id)
-    send_data(type: :call_service, domain: :light, service: :turn_off,
-              target: { entity_id: entity_id })
-  end
-
-  def dimmer_on(entity_id, level)
-    send_data(type: :call_service, domain: :light, service: :turn_on,
-              service_data: { brightness_pct: level }, target: { entity_id: entity_id })
-  end
-
-  def dimmer_off(entity_id)
-    send_data(type: :call_service, domain: :light, service: :turn_off,
-              target: { entity_id: entity_id })
-  end
-
   def dimmer_set(entity_id, level)
-    level.to_i.zero? ? dimmer_off(entity_id) : dimmer_on(entity_id, level)
+    if level.to_i.zero?
+      send_data(type: :call_service, domain: :light, service: :turn_off, target: { entity_id: entity_id })
+    else
+      send_data(type: :call_service, domain: :light, service: :turn_on,
+                service_data: { brightness_pct: level }, target: { entity_id: entity_id })
+    end
+  end
+
+  def socket_on(entity_id)
+    send_data(type: :call_service, domain: :switch, service: :turn_on, target: { entity_id: entity_id })
+  end
+
+  def socket_off(entity_id)
+    send_data(type: :call_service, domain: :switch, service: :turn_off, target: { entity_id: entity_id })
   end
 
   def shade_set(entity_id, level)
@@ -147,18 +140,27 @@ module HassRequests
   end
 
   def lock_lock(entity_id)
-    send_data(type: :call_service, domain: :lock, service: :lock,
-              target: { entity_id: entity_id })
+    send_data(type: :call_service, domain: :lock, service: :lock, target: { entity_id: entity_id })
   end
 
   def unlock_lock(entity_id)
-    send_data(type: :call_service, domain: :lock, service: :unlock,
-              target: { entity_id: entity_id })
+    send_data(type: :call_service, domain: :lock, service: :unlock, target: { entity_id: entity_id })
+  end
+
+  def open_garage_door(entity_id)
+    send_data(type: :call_service, domain: :cover, service: :open_cover, target: { entity_id: entity_id })
+  end
+
+  def close_garage_door(entity_id)
+    send_data(type: :call_service, domain: :cover, service: :close_cover, target: { entity_id: entity_id })
+  end
+
+  def toggle_garage_door(entity_id)
+    send_data(type: :call_service, domain: :cover, service: :toggle, target: { entity_id: entity_id })
   end
 
   def button_press(entity_id)
-    send_data(type: :call_service, domain: :button, service: :press,
-              target: { entity_id: entity_id })
+    send_data(type: :call_service, domain: :button, service: :press, target: { entity_id: entity_id })
   end
 end
 
@@ -167,6 +169,7 @@ class HassCore
   include HassRequests
 
   POSTFIX = "\n"
+
   STATE_FILE = ENV['STATE_FILE'] || '/data/savant_hass_proxy_state.json'
   HA_PING_INTERVAL = (ENV['HA_PING_INTERVAL'] || '30').to_i
   SAVANT_HELLO_INTERVAL = (ENV['SAVANT_HELLO_INTERVAL'] || '10').to_i
@@ -192,13 +195,12 @@ class HassCore
     @em_mutex = Mutex.new
     @em_thread = nil
 
-    # Savant client swapping
+    # Savant connection hot-swap
     @client_mutex = Mutex.new
     @client = nil
-    @client_reader_thread = nil
 
-    # Cache last values to replay on reconnect
-    @state_cache = {} # key => value (already stringified)
+    # cache last values for replay
+    @state_cache = {}
 
     @persisted = load_state
     apply_persisted_defaults
@@ -208,47 +210,38 @@ class HassCore
     start_savant_heartbeat
   end
 
-  def shutdown!
-    return if @shutdown
-    @shutdown = true
-    cancel_timers!
-    safe_close_client
-    begin; @hass_ws&.close; rescue; end
-  end
-
-  # ---------- Savant attach/detach ----------
-  def attach_client(client)
-    setup_tcp_keepalive(client)
+  # ----------- Savant attach/detach -----------
+  def attach_client(sock)
+    setup_tcp_keepalive(sock)
 
     old = nil
     @client_mutex.synchronize do
       old = @client
-      @client = client
+      @client = sock
     end
     safe_close_socket(old) if old
 
-    send_to_savant('hello,proxy=ha_savant,proto=1')
-    send_to_savant('ready,ha=ok') if @ha_authed
-
-    # Replay cache so Savant has immediate state
+    # IMPORTANT: send only "parseable" lines for your XML (OtherUpdate uses ===)
+    send_line("hello===1")
+    send_line("ready===ok") if @ha_authed
     replay_cache
 
-    # Start reader thread for this socket (one per attached client)
-    start_client_reader_thread(client)
+    start_client_reader_thread(sock)
   end
 
   def detach_client
-    old = nil
-    @client_mutex.synchronize do
-      old = @client
-      @client = nil
-    end
+    @client_mutex.synchronize { detach_client_nolock }
+  end
+
+  # called ONLY when @client_mutex already locked
+  def detach_client_nolock
+    old = @client
+    @client = nil
     safe_close_socket(old) if old
   end
 
-  # ---------- Savant IO ----------
   def start_client_reader_thread(sock)
-    thr = Thread.new do
+    Thread.new do
       loop do
         break if @shutdown
         line = nil
@@ -260,15 +253,11 @@ class HassCore
         break unless line
         from_savant(line.chomp)
       end
-      # if current client died, detach (but keep HA alive)
-      @client_mutex.synchronize do
-        detach_client if @client == sock
-      end
-    end
 
-    @client_mutex.synchronize do
-      # Best effort: don't keep old thread reference; it will exit when socket closes
-      @client_reader_thread = thr
+      # Detach safely without recursive locking
+      @client_mutex.synchronize do
+        detach_client_nolock if @client == sock
+      end
     end
   end
 
@@ -276,41 +265,40 @@ class HassCore
     add_timer(
       EM.add_periodic_timer(SAVANT_HELLO_INTERVAL) do
         next if @shutdown
-        send_to_savant('hello,proxy=ha_savant,proto=1')
+        send_line("heartbeat===1")
       end
     )
   end
 
+  def send_line(line)
+    send_to_savant(line)
+  end
+
   def send_to_savant(*message)
     return if @shutdown
+
     sock = nil
     @client_mutex.synchronize { sock = @client }
     return unless sock && !sock.closed?
 
-    payload = map_message(message).join
-    sock.write(payload)
-
-  rescue => _e
-    # Detach dead socket; HA continues
+    Array(message).each do |m|
+      next unless m
+      cache_outgoing(m) if m.include?('===')
+      sock.write("#{m.to_s.gsub(POSTFIX, '')}#{POSTFIX}")
+    end
+  rescue
     detach_client
   end
 
-  def map_message(message)
-    Array(message).map { |m| m ? [m.to_s.gsub(POSTFIX, ''), POSTFIX] : nil }.compact
-  end
-
-  # Cache every outgoing key===value
   def cache_outgoing(msg)
-    # expect "key===value"
-    if (i = msg.index('==='))
-      k = msg[0...i]
-      v = msg[(i+3)..-1]
-      @state_cache[k] = v
-    end
+    i = msg.index('===')
+    return unless i
+    k = msg[0...i]
+    v = msg[(i + 3)..-1]
+    @state_cache[k] = v
   end
 
   def replay_cache
-    return if @shutdown
     sock = nil
     @client_mutex.synchronize { sock = @client }
     return unless sock && !sock.closed?
@@ -326,31 +314,39 @@ class HassCore
     detach_client
   end
 
-  # Override update? path via send_to_savant -> cache as well
-  def send_to_savant_with_cache(msg)
-    cache_outgoing(msg)
-    send_to_savant(msg)
-  end
+  # ----------- Savant commands (robust parsing) -----------
+  def from_savant(req)
+    cmd, *params = req.split(',')
 
-  # Monkey-patch point: update? uses send_to_savant; we redirect to cached version
-  def send_to_savant(*message)
-    return if @shutdown
-    Array(message).each do |m|
-      next unless m
-      if m.include?('===')
-        send_to_savant_with_cache(m)
+    case cmd
+    when 'subscribe_events'
+      send_json(type: 'subscribe_events')
+
+    when 'subscribe_entity'
+      # robust: params may be ["a,b,c,"] or ["a", "b", "c", ""]
+      raw = params.flatten.compact.join(',')
+      entities = raw.split(',').map { |s| s.to_s.strip }.reject(&:empty?)
+      persist_entities(entities) unless entities.empty?
+      send_json(type: 'subscribe_entities', entity_ids: entities) unless entities.empty?
+
+    when 'state_filter'
+      raw = params.flatten.compact.join(',')
+      @filter = raw.split(',').map { |s| s.to_s.strip }.reject(&:empty?)
+      persist_filter(@filter)
+
+      # optional ack (parseable by XML)
+      send_line("state_filter===ok")
+
+    else
+      if HassRequests.instance_methods(false).include?(cmd.to_sym)
+        send(cmd, *params)
       else
-        sock = nil
-        @client_mutex.synchronize { sock = @client }
-        next unless sock && !sock.closed?
-        sock.write("#{m}#{POSTFIX}")
+        p([:error, [:unknown_cmd, cmd, req]])
       end
     end
-  rescue
-    detach_client
   end
 
-  # ---------- HA WebSocket ----------
+  # ----------- HA WebSocket -----------
   def ensure_em_running
     return if EM.reactor_running?
     @em_mutex.synchronize do
@@ -390,7 +386,6 @@ class HassCore
   end
 
   def schedule_reconnect
-    return if @shutdown
     delay = @reconnect_delay
     @reconnect_delay = [@reconnect_delay * 2, RECONNECT_MAX].min
     p([:info, :ws_reconnect_scheduled, delay])
@@ -403,17 +398,38 @@ class HassCore
     false
   end
 
-  def enqueue_ws(json)
-    @ws_queue << json
-    @ws_queue.shift while @ws_queue.length > WS_QUEUE_MAX
-  end
+  def handle_message(data)
+    message = JSON.parse(data) rescue nil
+    return unless message
+    return p([:error, [:request_failed, message]]) if message['success'] == false
 
-  def flush_ws_queue
-    return unless @ha_authed && can_send_ws?
-    while (msg = @ws_queue.shift)
-      @hass_ws.send(msg)
+    case message['type']
+    when 'auth_required'
+      safe_ws_send({ type: 'auth', access_token: @token }.to_json)
+
+    when 'auth_ok'
+      @ha_authed = true
+      p([:info, :ha_ready])
+
+      start_ha_ping
+
+      ents = persisted_entities
+      send_json(type: 'subscribe_entities', entity_ids: ents) unless ents.empty?
+
+      flush_ws_queue
+
+      # IMPORTANT: parseable for XML
+      send_line("ready===ok")
+
+    when 'event'
+      parse_event(message['event'])
+
+    when 'result'
+      parse_result(message)
+
+    when 'pong'
+      p([:debug, :pong_received])
     end
-    p([:info, :ws_queue_flushed])
   end
 
   def start_ha_ping
@@ -427,42 +443,7 @@ class HassCore
     )
   end
 
-  def handle_message(data)
-    message = JSON.parse(data) rescue nil
-    return unless message
-    return p([:error, [:request_failed, message]]) if message['success'] == false
-    handle_hash(message)
-  end
-
-  def after_auth_ok
-    p([:info, :ha_ready])
-    start_ha_ping
-
-    ents = persisted_entities
-    subscribe_entities(ents) unless ents.empty?
-
-    flush_ws_queue
-    send_to_savant('ready,ha=ok') # if Savant attached, it becomes ready immediately
-  end
-
-  def handle_hash(message)
-    case message['type']
-    when 'auth_required' then send_auth
-    when 'auth_ok'
-      @ha_authed = true
-      after_auth_ok
-    when 'event'  then parse_event(message['event'])
-    when 'result' then parse_result(message)
-    when 'pong'   then p([:debug, :pong_received])
-    end
-  end
-
-  def send_auth
-    safe_ws_send({ type: 'auth', access_token: @token }.to_json)
-  end
-
   def send_json(hash)
-    # Add id to all non-auth messages
     @id += 1
     hash['id'] = @id
     json = hash.to_json
@@ -484,7 +465,18 @@ class HassCore
     end
   end
 
-  # ---------- State persistence ----------
+  def enqueue_ws(json)
+    @ws_queue << json
+    @ws_queue.shift while @ws_queue.length > WS_QUEUE_MAX
+  end
+
+  def flush_ws_queue
+    return unless @ha_authed && can_send_ws?
+    @ws_queue.shift.tap { |msg| @hass_ws.send(msg) } while @ws_queue.any?
+    p([:info, :ws_queue_flushed])
+  end
+
+  # ----------- State persistence -----------
   def load_state
     JSON.parse(File.read(STATE_FILE)) rescue { 'filter' => nil, 'entities' => [] }
   end
@@ -519,55 +511,11 @@ class HassCore
     save_state
   end
 
-  # ---------- Savant commands ----------
-  def hass_request?(cmd)
-    HassRequests.instance_methods(false).include?(cmd.to_sym)
-  end
-
-  def from_savant(req)
-    cmd, *params = req.split(',')
-    case cmd
-    when 'subscribe_events'
-      send_json(type: 'subscribe_events')
-    when 'subscribe_entity'
-      entities = params.flatten.compact.reject(&:empty?)
-      persist_entities(entities) unless entities.empty?
-      subscribe_entities(entities) unless entities.empty?
-    when 'state_filter'
-      @filter = params
-      persist_filter(@filter)
-    else
-      if hass_request?(cmd)
-        send(cmd, *params)
-      else
-        p([:error, [:unknown_cmd, cmd, req]])
-      end
-    end
-  end
-
-  def subscribe_entities(entity_ids)
-    send_json(type: 'subscribe_entities', entity_ids: entity_ids)
-  end
-
-  # ---------- Timers / sockets ----------
+  # ----------- Utils -----------
   def add_timer(t); @timers << t if t; t; end
-
-  def cancel_timers!
-    @timers.each { |t| t.cancel rescue nil }
-    @timers.clear
-  end
 
   def safe_close_socket(sock)
     sock&.close rescue nil
-  end
-
-  def safe_close_client
-    sock = nil
-    @client_mutex.synchronize do
-      sock = @client
-      @client = nil
-    end
-    safe_close_socket(sock)
   end
 
   def setup_tcp_keepalive(sock)
