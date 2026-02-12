@@ -151,6 +151,13 @@
         <append_data_to_state_names state="EntityID" />
       </status_message>
 
+      <status_message name="HelloReady">
+      <data type="character" terminator_type="end_of_data">
+    <update state="HelloReadyRaw" type="string"/>
+    </data>
+    </status_message>
+
+
       <status_message name="Unhandled">
         <data type="character" terminator_type="end_of_data">
           <update state="Unhandled" type="string"></update>
@@ -548,11 +555,16 @@
       </action>
       <action name="AwaitConnection">
   <update_state_variable name="HassEntityArray" update_type="set" update_source="constant"></update_state_variable>
-  <execute_on_schedule period_ms="0"/>
-  <execute_action_after_delay ms_delay="3000" action_name="SubscribeEvents" action_type="CUSTOM"></execute_action_after_delay>
-  <execute_action_after_delay ms_delay="3000" action_name="StateFilter" action_type="CUSTOM"></execute_action_after_delay>
-  <execute_action_after_delay ms_delay="6000" action_name="SubscribeEntities" action_type="CUSTOM"></execute_action_after_delay>
+
+  <!-- FIX: period_ms=0 puede ejecutar en loop agresivo -->
+  <execute_on_schedule period_ms="15000"/>
+
+  <!-- Mantengo tus tiempos, pero con schedule seguro -->
+  <execute_action_after_delay ms_delay="11000" action_name="SubscribeEvents" action_type="CUSTOM"></execute_action_after_delay>
+  <execute_action_after_delay ms_delay="11000" action_name="StateFilter" action_type="CUSTOM"></execute_action_after_delay>
+  <execute_action_after_delay ms_delay="15000" action_name="SubscribeEntities" action_type="CUSTOM"></execute_action_after_delay>
 </action>
+
       <action name="SubscribeEvents">
         <execute_on_state_variable_condition name="subscribe_all_events" test_condition="not_equal">NO</execute_on_state_variable_condition>
         <command_interface interface="ip">
