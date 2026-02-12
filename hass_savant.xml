@@ -5,11 +5,11 @@
     4.0 : Adding Buttons to the lighting control part, changed switch loads to the switch domain
   </notes>
   <control_interfaces preferred="ip">
-    <ip port="8080" response_time_length_ms="50" protocol="tcp">
-      <send_postfix type="hex">0A</send_postfix>
-      <receive_end_condition test_condition="data" type="hex">0A</receive_end_condition>
-    </ip>
-  </control_interfaces>
+  <ip port="8080" response_time_length_ms="500" protocol="tcp">
+    <send_postfix type="hex">0A</send_postfix>
+    <receive_end_condition test_condition="data" type="hex">0A</receive_end_condition>
+  </ip>
+</control_interfaces>
   <media_interfaces>
     <data name_on_component="Ethernet">
       <combined_media>
@@ -547,12 +547,12 @@
         <update_state_variable name="HassEntityArray" update_type="append" update_source="constant">,</update_state_variable>
       </action>
       <action name="AwaitConnection">
-        <update_state_variable name="HassEntityArray" update_type="set" update_source="constant"></update_state_variable>
-        <execute_on_schedule period_ms="0"/>
-        <execute_action_after_delay ms_delay="11000" action_name="SubscribeEvents" action_type="CUSTOM"></execute_action_after_delay>
-        <execute_action_after_delay ms_delay="11000" action_name="StateFilter" action_type="CUSTOM"></execute_action_after_delay>
-        <execute_action_after_delay ms_delay="15000" action_name="SubscribeEntities" action_type="CUSTOM"></execute_action_after_delay>
-      </action>
+  <update_state_variable name="HassEntityArray" update_type="set" update_source="constant"></update_state_variable>
+  <execute_on_schedule period_ms="0"/>
+  <execute_action_after_delay ms_delay="3000" action_name="SubscribeEvents" action_type="CUSTOM"></execute_action_after_delay>
+  <execute_action_after_delay ms_delay="3000" action_name="StateFilter" action_type="CUSTOM"></execute_action_after_delay>
+  <execute_action_after_delay ms_delay="6000" action_name="SubscribeEntities" action_type="CUSTOM"></execute_action_after_delay>
+</action>
       <action name="SubscribeEvents">
         <execute_on_state_variable_condition name="subscribe_all_events" test_condition="not_equal">NO</execute_on_state_variable_condition>
         <command_interface interface="ip">
