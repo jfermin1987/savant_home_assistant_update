@@ -1,15 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<component xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="racepoint_component_profile.xsd" manufacturer="Hass" model="Savant" alias="Home Assistant" device_class="Lighting_controller" minimum_component_engine_version="0" rpm_xml_version="4.0">
+<component xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:noNamespaceSchemaLocation="racepoint_component_profile.xsd"
+           manufacturer="Hass"
+           model="Savant"
+           alias="Home Assistant"
+           device_class="Lighting_controller"
+           minimum_component_engine_version="0"
+           rpm_xml_version="4.0">
 
   <notes>
     4.0 : Adding Buttons to the lighting control part, changed switch loads to the switch domain
   </notes>
+
   <control_interfaces preferred="ip">
-  <ip port="8080" response_time_length_ms="500" protocol="tcp">
-    <send_postfix type="hex">0A</send_postfix>
-    <receive_end_condition test_condition="data" type="hex">0A</receive_end_condition>
-  </ip>
-</control_interfaces>
+    <ip port="8080" response_time_length_ms="500" protocol="tcp">
+      <!-- 0A = LF = \n -->
+      <send_postfix type="hex">0A</send_postfix>
+      <receive_end_condition test_condition="data" type="hex">0A</receive_end_condition>
+    </ip>
+  </control_interfaces>
+
   <media_interfaces>
     <data name_on_component="Ethernet">
       <combined_media>
@@ -17,7 +27,6 @@
         <control port="8080"/>
       </combined_media>
     </data>
-
 
     <internal name_on_component="Lighting Controller">
       <environmental_media/>
@@ -28,6 +37,7 @@
       <resource resource_type="ENV_SHADECONTROLLER_SOURCE"/>
     </internal>
   </media_interfaces>
+
   <state_variable_list>
     <state_variable name="subscribe_all_events" owning_logical_component="Home Assistant" state_center_type="string" user_editable="yes">NO</state_variable>
     <state_variable name="state_filter" owning_logical_component="Home Assistant" state_center_type="string" state_center_binding="state_filter" user_editable="yes">brightness,state,cover,lock,current_position,switch</state_variable>
@@ -37,9 +47,8 @@
     <state_variable name="FanSet_1" owning_logical_component="Home Assistant" state_center_type="string" user_editable="yes" note="Fan Speed Low">2</state_variable>
     <state_variable name="FanSet_2" owning_logical_component="Home Assistant" state_center_type="string" user_editable="yes" note="Fan Speed Mid">4</state_variable>
     <state_variable name="FanSet_3" owning_logical_component="Home Assistant" state_center_type="string" user_editable="yes" note="Fan Speed High">7</state_variable>
-
-
   </state_variable_list>
+
   <logical_component logical_component_name="Home Assistant">
     <implementation>
       <internal name_on_component="Lighting Controller"/>
@@ -121,6 +130,7 @@
         </data>
         <append_data_to_state_names state="EntityID" />
       </status_message>
+
       <status_message name="OtherUpdate">
         <data type="character" terminator="===" terminator_type="character">
           <update state="EntityID" type="string" />
@@ -151,13 +161,6 @@
         <append_data_to_state_names state="EntityID" />
       </status_message>
 
-      <status_message name="HelloReady">
-      <data type="character" terminator_type="end_of_data">
-    <update state="HelloReadyRaw" type="string"/>
-    </data>
-    </status_message>
-
-
       <status_message name="Unhandled">
         <data type="character" terminator_type="end_of_data">
           <update state="Unhandled" type="string"></update>
@@ -165,6 +168,7 @@
       </status_message>
     </status_messages>
 
+    <!-- FAN -->
     <resource_component_actions resource_type="ENV_FANCONTROLLER_SOURCE">
       <action name="FanSet">
         <action_argument name="Address1" note="Entity ID"/>
@@ -175,7 +179,6 @@
         <action_argument name="Address6" note="not used"/>
         <action_argument name="FanSpeed" note="Fan Speed 0 - 3"/>
         <command_interface interface="ip">
-          <!-- Can sequence multiple commands, maybe to turn it off when FanSpeed is 0? -->
           <command response_required="no">
             <parameter_list>
               <parameter parameter_data_type="character">fan_set,</parameter>
@@ -196,12 +199,13 @@
             <unique_identifier name="DeviceID" address_component="1"/>
           </valueSource>
         </slider_representation>
-        <query_status_with_action name="TrackEntity" period_ms="0">
+        <query_status_with_action name="TrackEntity" period_ms="60000">
           <with_arg name="Address1" address_component="1" format="%s" />
         </query_status_with_action>
       </entity>
     </resource_component_actions>
 
+    <!-- LIGHTING / SWITCHES / BUTTON -->
     <resource_component_actions resource_type="ENV_LIGHTINGCONTROLLER_SOURCE">
       <action name="SwitchOn">
         <action_argument name="Address1" note="Entity ID"/>
@@ -279,6 +283,7 @@
           </command>
         </command_interface>
       </action>
+
       <action name="ButtonPressAndRelease">
         <action_argument name="Address1" note="Entity ID"/>
         <action_argument name="Address2" note="LED ID"/>
@@ -304,7 +309,7 @@
             <unique_identifier address_component="1" name="Address1" format="%s"/>
           </valueSource>
         </slider_representation>
-        <query_status_with_action name="TrackEntity" period_ms="0">
+        <query_status_with_action name="TrackEntity" period_ms="60000">
           <with_arg name="Address1" address_component="1" format="%s" />
         </query_status_with_action>
       </entity>
@@ -319,37 +324,38 @@
             <unique_identifier name="Address1" address_component="1" format="%s"/>
           </toggleOnUsingState>
         </toggle_button_representation>
-        <query_status_with_action name="TrackEntity" period_ms="0">
+        <query_status_with_action name="TrackEntity" period_ms="60000">
           <with_arg name="Address1" address_component="1" format="%s" />
         </query_status_with_action>
       </entity>
 
       <entity name="Keypad Button" address_components="2">
         <toggle_button_representation>
-            <press_action name="ButtonPress"></press_action>
-            <!-- <release_action name="ButtonRelease"></release_action> -->
-            <toggle_action name="ButtonPress"></toggle_action>
-            <toggle_release_action name="ButtonRelease"></toggle_release_action>
-            <osd_press_action name="ButtonPressAndRelease"></osd_press_action>
-            <osd_hold_action name="ButtonPressAndRelease"></osd_hold_action>
-            <toggleOnUsingState name="IsLedOn">
-                <unique_identifier name="Address2" address_component="2" format="%s"/>
-            </toggleOnUsingState>
+          <press_action name="ButtonPress"></press_action>
+          <toggle_action name="ButtonPress"></toggle_action>
+
+          <!-- FIX: ButtonRelease NO existe. Usamos ButtonPress también aquí -->
+          <toggle_release_action name="ButtonPress"></toggle_release_action>
+
+          <osd_press_action name="ButtonPressAndRelease"></osd_press_action>
+          <osd_hold_action name="ButtonPressAndRelease"></osd_hold_action>
+          <toggleOnUsingState name="IsLedOn">
+            <unique_identifier name="Address2" address_component="2" format="%s"/>
+          </toggleOnUsingState>
         </toggle_button_representation>
 
-        <query_status_with_action name="TrackEntity" period_ms="0">
+        <query_status_with_action name="TrackEntity" period_ms="60000">
           <with_arg name="Address1" address_component="1" format="%s" />
         </query_status_with_action>
 
-        <query_status_with_action name="TrackEntity" period_ms="0">
+        <query_status_with_action name="TrackEntity" period_ms="60000">
           <with_arg name="Address1" address_component="2" format="%s" />
         </query_status_with_action>
-
-    </entity>
+      </entity>
     </resource_component_actions>
 
+    <!-- SHADES -->
     <resource_component_actions resource_type="ENV_SHADECONTROLLER_SOURCE">
-
       <action name="ShadeSet">
         <action_argument name="Address1" />
         <action_argument name="Address2" />
@@ -380,56 +386,6 @@
             <unique_identifier name="href" address_component="1" format="%s" />
           </valueSource>
         </slider_representation>
-        <group_representation>
-          <push_button_representation>
-            <release_action name="ShadeSet">
-              <argument name="ShadeLevel" value="0" />
-            </release_action>
-            <osd_press_action name="ShadeSet">
-              <argument name="ShadeLevel" value="0" />
-            </osd_press_action>
-          </push_button_representation>
-          <push_button_representation>
-            <release_action name="ShadeSet">
-              <argument name="ShadeLevel" value="20" />
-            </release_action>
-            <osd_press_action name="ShadeSet">
-              <argument name="ShadeLevel" value="20" />
-            </osd_press_action>
-          </push_button_representation>
-          <push_button_representation>
-            <release_action name="ShadeSet">
-              <argument name="ShadeLevel" value="40" />
-            </release_action>
-            <osd_press_action name="ShadeSet">
-              <argument name="ShadeLevel" value="40" />
-            </osd_press_action>
-          </push_button_representation>
-          <push_button_representation>
-            <release_action name="ShadeSet">
-              <argument name="ShadeLevel" value="60" />
-            </release_action>
-            <osd_press_action name="ShadeSet">
-              <argument name="ShadeLevel" value="60" />
-            </osd_press_action>
-          </push_button_representation>
-          <push_button_representation>
-            <release_action name="ShadeSet">
-              <argument name="ShadeLevel" value="80" />
-            </release_action>
-            <osd_press_action name="ShadeSet">
-              <argument name="ShadeLevel" value="80" />
-            </osd_press_action>
-          </push_button_representation>
-          <push_button_representation>
-            <release_action name="ShadeSet">
-              <argument name="ShadeLevel" value="100" />
-            </release_action>
-            <osd_press_action name="ShadeSet">
-              <argument name="ShadeLevel" value="100" />
-            </osd_press_action>
-          </push_button_representation>
-        </group_representation>
         <toggle_button_representation>
           <press_action name="ShadeSet">
             <argument name="ShadeLevel" value="100" />
@@ -447,13 +403,13 @@
             <unique_identifier name="href" address_component="1" format="%s" />
           </toggleOnUsingState>
         </toggle_button_representation>
-        <query_status_with_action name="TrackEntity" period_ms="0">
+        <query_status_with_action name="TrackEntity" period_ms="60000">
           <with_arg name="Address1" address_component="1" format="%s" />
         </query_status_with_action>
       </entity>
-
     </resource_component_actions>
 
+    <!-- LOCKS -->
     <resource_component_actions resource_type="ENV_DOOR_LOCK_SOURCE">
       <action name="LockDoorLock">
         <action_argument name="DoorLockAddress" note="Entity ID"/>
@@ -490,12 +446,13 @@
           <release_action name="UnlockDoorLock"/>
           <toggle_release_action name="LockDoorLock"/>
         </toggle_button_representation>
-        <query_status_with_action name="TrackEntity" period_ms="0">
+        <query_status_with_action name="TrackEntity" period_ms="60000">
           <with_arg name="Address1" address_component="1" format="%s" />
         </query_status_with_action>
       </entity>
     </resource_component_actions>
 
+    <!-- GARAGE -->
     <resource_component_actions resource_type="ENV_GARAGE_DOOR_SOURCE">
       <action name="CloseGarageDoor">
         <action_argument name="GarageDoorAddress" note="Entity ID"/>
@@ -541,29 +498,27 @@
           <release_action name="OpenGarageDoor"/>
           <toggle_release_action name="CloseGarageDoor"/>
         </toggle_button_representation>
-        <query_status_with_action name="TrackEntity" period_ms="0">
+        <query_status_with_action name="TrackEntity" period_ms="60000">
           <with_arg name="Address1" address_component="1" format="%s" />
         </query_status_with_action>
       </entity>
     </resource_component_actions>
 
+    <!-- CUSTOM -->
     <custom_component_actions>
       <action name="TrackEntity">
         <action_argument name="Address1" />
         <update_state_variable name="HassEntityArray" update_type="append" update_source="action_argument">Address1</update_state_variable>
         <update_state_variable name="HassEntityArray" update_type="append" update_source="constant">,</update_state_variable>
       </action>
+
       <action name="AwaitConnection">
-  <update_state_variable name="HassEntityArray" update_type="set" update_source="constant"></update_state_variable>
-
-  <!-- FIX: period_ms=0 puede ejecutar en loop agresivo -->
-  <execute_on_schedule period_ms="15000"/>
-
-  <!-- Mantengo tus tiempos, pero con schedule seguro -->
-  <execute_action_after_delay ms_delay="11000" action_name="SubscribeEvents" action_type="CUSTOM"></execute_action_after_delay>
-  <execute_action_after_delay ms_delay="11000" action_name="StateFilter" action_type="CUSTOM"></execute_action_after_delay>
-  <execute_action_after_delay ms_delay="15000" action_name="SubscribeEntities" action_type="CUSTOM"></execute_action_after_delay>
-</action>
+        <update_state_variable name="HassEntityArray" update_type="set" update_source="constant"></update_state_variable>
+        <execute_on_schedule period_ms="15000"/>
+        <execute_action_after_delay ms_delay="2000" action_name="SubscribeEvents" action_type="CUSTOM"></execute_action_after_delay>
+        <execute_action_after_delay ms_delay="3000" action_name="StateFilter" action_type="CUSTOM"></execute_action_after_delay>
+        <execute_action_after_delay ms_delay="5000" action_name="SubscribeEntities" action_type="CUSTOM"></execute_action_after_delay>
+      </action>
 
       <action name="SubscribeEvents">
         <execute_on_state_variable_condition name="subscribe_all_events" test_condition="not_equal">NO</execute_on_state_variable_condition>
@@ -573,6 +528,7 @@
           </command>
         </command_interface>
       </action>
+
       <action name="StateFilter">
         <command_interface interface="ip">
           <command response_required="no">
@@ -583,6 +539,7 @@
           </command>
         </command_interface>
       </action>
+
       <action name="SubscribeEntities">
         <command_interface interface="ip">
           <command response_required="no">
@@ -595,6 +552,6 @@
         </command_interface>
       </action>
     </custom_component_actions>
-  </logical_component>
 
+  </logical_component>
 </component>
