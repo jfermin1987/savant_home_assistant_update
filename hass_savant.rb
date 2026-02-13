@@ -7,6 +7,9 @@ require 'json'
 require 'faye/websocket'
 require 'eventmachine'
 
+# ---------------------------
+# Parsing / updates to Savant
+# ---------------------------
 module HassMessageParsingMethods
   def new_data(js_data)
     return {} unless js_data['data']
@@ -14,8 +17,8 @@ module HassMessageParsingMethods
   end
 
   def parse_event(js_data)
-    return entities_changed(js_data['c']) if js_data.keys == ['c']
-    return entities_changed(js_data['a']) if js_data.keys == ['a']
+    return entities_changed(js_data['c']) if js_data.is_a?(Hash) && js_data.keys == ['c']
+    return entities_changed(js_data['a']) if js_data.is_a?(Hash) && js_data.keys == ['a']
 
     case js_data['event_type']
     when 'state_changed' then parse_state(new_data(js_data))
@@ -27,9 +30,9 @@ module HassMessageParsingMethods
 
   def entities_changed(entities)
     entities.each do |entity, state|
-      state = state['+'] if state.key?('+')
+      state = state['+'] if state.is_a?(Hash) && state.key?('+')
       attributes = state['a']
-      value = state['s']
+      value      = state['s']
       update?("#{entity}_state", 'state', value) if value
       update_with_hash(entity, attributes) if attributes
     end
@@ -43,7 +46,7 @@ module HassMessageParsingMethods
   end
 
   def included_with_filter?(primary_key)
-    return true if @filter.empty? || @filter == ['all']
+    return true if @filter.nil? || @filter.empty? || @filter == ['all']
     @filter.include?(primary_key)
   end
 
@@ -60,8 +63,10 @@ module HassMessageParsingMethods
 
   def update?(key, primary_key, value)
     return unless value && included_with_filter?(primary_key)
+    # fix HA brightness 1/2 edge
     value = 3 if primary_key == 'brightness' && [1, 2].include?(value)
-    send_to_savant("#{key}===#{value}")
+    send_line("#{key}===#{value}")
+    cache_line("#{key}===#{value}")
   end
 
   def update_hashed_array(parent_key, msg_array)
@@ -98,6 +103,9 @@ module HassMessageParsingMethods
   end
 end
 
+# ---------------------------
+# Requests from Savant to HA
+# ---------------------------
 module HassRequests
   def send_data(**data)
     send_json(data)
@@ -107,42 +115,35 @@ module HassRequests
     send_data(type: :call_service, domain: :fan, service: :turn_on,
               service_data: { speed: speed }, target: { entity_id: entity_id })
   end
-
-  def fan_off(entity_id, _speed = nil)
-    send_data(type: :call_service, domain: :fan, service: :turn_off,
-              target: { entity_id: entity_id })
+  def fan_off(entity_id, _speed=nil)
+    send_data(type: :call_service, domain: :fan, service: :turn_off, target: { entity_id: entity_id })
   end
-
   def fan_set(entity_id, speed)
     speed.to_i.zero? ? fan_off(entity_id) : fan_on(entity_id, speed)
   end
 
   def dimmer_set(entity_id, level)
-    if level.to_i.zero?
-      send_data(type: :call_service, domain: :light, service: :turn_off, target: { entity_id: entity_id })
-    else
-      send_data(type: :call_service, domain: :light, service: :turn_on,
-                service_data: { brightness_pct: level }, target: { entity_id: entity_id })
-    end
+    level = level.to_i
+    send_data(type: :call_service, domain: :light, service: (level.zero? ? :turn_off : :turn_on),
+              service_data: (level.zero? ? {} : { brightness_pct: level }),
+              target: { entity_id: entity_id })
   end
 
   def socket_on(entity_id)
     send_data(type: :call_service, domain: :switch, service: :turn_on, target: { entity_id: entity_id })
   end
-
   def socket_off(entity_id)
     send_data(type: :call_service, domain: :switch, service: :turn_off, target: { entity_id: entity_id })
   end
 
   def shade_set(entity_id, level)
     send_data(type: :call_service, domain: :cover, service: :set_cover_position,
-              service_data: { position: level }, target: { entity_id: entity_id })
+              service_data: { position: level.to_i }, target: { entity_id: entity_id })
   end
 
   def lock_lock(entity_id)
     send_data(type: :call_service, domain: :lock, service: :lock, target: { entity_id: entity_id })
   end
-
   def unlock_lock(entity_id)
     send_data(type: :call_service, domain: :lock, service: :unlock, target: { entity_id: entity_id })
   end
@@ -150,11 +151,9 @@ module HassRequests
   def open_garage_door(entity_id)
     send_data(type: :call_service, domain: :cover, service: :open_cover, target: { entity_id: entity_id })
   end
-
   def close_garage_door(entity_id)
     send_data(type: :call_service, domain: :cover, service: :close_cover, target: { entity_id: entity_id })
   end
-
   def toggle_garage_door(entity_id)
     send_data(type: :call_service, domain: :cover, service: :toggle, target: { entity_id: entity_id })
   end
@@ -164,201 +163,192 @@ module HassRequests
   end
 end
 
+# -------------------------------------------------------
+# HassCore: 1 HA WebSocket + TCP server + hot-swap client
+# -------------------------------------------------------
 class HassCore
   include HassMessageParsingMethods
   include HassRequests
 
-  POSTFIX = "\n"
+  STATE_FILE          = ENV['STATE_FILE'] || '/data/savant_hass_proxy_state.json'
+  HA_PING_INTERVAL    = (ENV['HA_PING_INTERVAL'] || '30').to_i
+  TCP_HEARTBEAT_SECS  = (ENV['TCP_HEARTBEAT_SECS'] || '1').to_i
+  RECONNECT_MIN       = (ENV['HA_RECONNECT_MIN'] || '1').to_i
+  RECONNECT_MAX       = (ENV['HA_RECONNECT_MAX'] || '30').to_i
+  WS_QUEUE_MAX        = (ENV['WS_QUEUE_MAX'] || '200').to_i
+  CACHE_MAX_LINES     = (ENV['CACHE_MAX_LINES'] || '200').to_i
 
-  STATE_FILE = ENV['STATE_FILE'] || '/data/savant_hass_proxy_state.json'
-  HA_PING_INTERVAL = (ENV['HA_PING_INTERVAL'] || '30').to_i
-  SAVANT_HELLO_INTERVAL = (ENV['SAVANT_HELLO_INTERVAL'] || '10').to_i
-  RECONNECT_MIN = (ENV['HA_RECONNECT_MIN'] || '1').to_i
-  RECONNECT_MAX = (ENV['HA_RECONNECT_MAX'] || '30').to_i
-  WS_QUEUE_MAX = (ENV['WS_QUEUE_MAX'] || '200').to_i
-  REPLAY_MAX = (ENV['SAVANT_REPLAY_MAX'] || '2000').to_i
-
-  def initialize(hass_address, token, filter = ['all'])
-    @address = hass_address
-    @token = token
-    @filter = filter
+  def initialize(ws_url, token)
+    @ws_url  = ws_url
+    @token   = token
 
     @shutdown = false
     @ha_authed = false
     @id = 0
-
     @ws_queue = []
     @reconnect_delay = RECONNECT_MIN
     @ha_ping_timer_started = false
 
-    @timers = []
-    @em_mutex = Mutex.new
-    @em_thread = nil
-
-    # Savant connection hot-swap
-    @client_mutex = Mutex.new
     @client = nil
+    @client_mutex = Mutex.new
+    @client_writer_mutex = Mutex.new
 
-    # cache last values for replay
-    @state_cache = {}
+    @cache = []
+    @cache_mutex = Mutex.new
 
     @persisted = load_state
+    @filter = ['all']
     apply_persisted_defaults
 
+    @em_mutex = Mutex.new
     ensure_em_running
     connect_websocket
-    start_savant_heartbeat
+    start_tcp_heartbeat
   end
 
-  # ----------- Savant attach/detach -----------
+  # ---------------- TCP Server side ----------------
   def attach_client(sock)
-  setup_tcp_keepalive(sock)
+    setup_tcp_keepalive(sock)
 
-  # Debounce: si Savant abre sockets en ráfaga, evita churn
-  now = Time.now.to_f
-  @last_attach ||= 0.0
-  if (now - @last_attach) < 0.25
-    safe_close_socket(sock)
-    return
-  end
-  @last_attach = now
+    # Debounce: Savant sometimes opens sockets in bursts
+    now = Time.now.to_f
+    @last_attach ||= 0.0
+    if (now - @last_attach) < 0.25
+      safe_close_socket(sock)
+      return
+    end
+    @last_attach = now
 
-  old = nil
-  @client_mutex.synchronize do
-    old = @client
-    @client = sock
-  end
-  safe_close_socket(old) if old
-
-  send_line("hello===1")
-  send_line("ready===ok") if @ha_authed
-  replay_cache
-  start_client_reader_thread(sock)
-end
-
-  def detach_client
-    @client_mutex.synchronize { detach_client_nolock }
-  end
-
-  # called ONLY when @client_mutex already locked
-  def detach_client_nolock
-    old = @client
-    @client = nil
+    old = nil
+    @client_mutex.synchronize do
+      old = @client
+      @client = sock
+    end
     safe_close_socket(old) if old
+
+    p([:info, :client_connected, sock.peeraddr])
+
+    # Always talk first so Savant marks it "Connected"
+    send_line("heartbeat===1")
+    send_line("ready===ok") if @ha_authed
+    replay_cache
+
+    start_client_reader_thread(sock)
+  end
+
+  def detach_client(sock)
+    # IMPORTANT: no recursive locking
+    old = nil
+    @client_mutex.synchronize do
+      if @client == sock
+        old = @client
+        @client = nil
+      end
+    end
+    safe_close_socket(old) if old
+  end
+
+  def send_line(line)
+    sock = nil
+    @client_mutex.synchronize { sock = @client }
+    return unless sock && !sock.closed?
+
+    @client_writer_mutex.synchronize do
+      begin
+        sock.write(line.to_s)
+        sock.write("\n")
+      rescue => e
+        p([:error, :tcp_write_failed, e.message])
+        detach_client(sock)
+      end
+    end
+  end
+
+  def cache_line(line)
+    @cache_mutex.synchronize do
+      @cache << line
+      @cache.shift while @cache.length > CACHE_MAX_LINES
+    end
+  end
+
+  def replay_cache
+    lines = nil
+    @cache_mutex.synchronize { lines = @cache.dup }
+    p([:info, :replayed_cache, lines.length])
+    lines.each { |l| send_line(l) }
   end
 
   def start_client_reader_thread(sock)
     Thread.new do
+      begin
+        while (raw = sock.gets)
+          line = raw.chomp
+          from_savant(line)
+        end
+      rescue => e
+        p([:error, :savant_read_error, e.class.to_s, e.message])
+      ensure
+        detach_client(sock)
+      end
+    end
+  end
+
+  def start_tcp_heartbeat
+    Thread.new do
       loop do
         break if @shutdown
-        line = nil
-        begin
-          line = sock.gets
-        rescue IOError, SystemCallError
-          break
-        end
-        break unless line
-        from_savant(line.chomp)
-      end
-
-      # Detach safely without recursive locking
-      @client_mutex.synchronize do
-        detach_client_nolock if @client == sock
-      end
-    end
-  end
-
-  def start_savant_heartbeat
-    add_timer(
-      EM.add_periodic_timer(SAVANT_HELLO_INTERVAL) do
-        next if @shutdown
         send_line("heartbeat===1")
+        sleep TCP_HEARTBEAT_SECS
       end
-    )
-  end
-
-  def send_line(line)
-    send_to_savant(line)
-  end
-
-  def send_to_savant(*message)
-    return if @shutdown
-
-    sock = nil
-    @client_mutex.synchronize { sock = @client }
-    return unless sock && !sock.closed?
-
-    Array(message).each do |m|
-      next unless m
-      cache_outgoing(m) if m.include?('===')
-      sock.write("#{m.to_s.gsub(POSTFIX, '')}#{POSTFIX}")
     end
-  rescue
-    detach_client
   end
 
-  def cache_outgoing(msg)
-    i = msg.index('===')
-    return unless i
-    k = msg[0...i]
-    v = msg[(i + 3)..-1]
-    @state_cache[k] = v
-  end
-
-  def replay_cache
-    sock = nil
-    @client_mutex.synchronize { sock = @client }
-    return unless sock && !sock.closed?
-
-    count = 0
-    @state_cache.each do |k, v|
-      sock.write("#{k}===#{v}#{POSTFIX}")
-      count += 1
-      break if count >= REPLAY_MAX
-    end
-    p([:info, :replayed_cache, count])
-  rescue
-    detach_client
-  end
-
-  # ----------- Savant commands (robust parsing) -----------
+  # ---------------- Savant command parsing ----------------
   def from_savant(req)
     cmd, *params = req.split(',')
+    cmd = cmd.to_s.strip
 
+    # ACK inmediato para que Savant no marque "Not Connected"
+    # (Aunque response_required="no", esto ayuda al estado de enlace)
     case cmd
-    when 'subscribe_events'
-      send_json(type: 'subscribe_events')
-
-    when 'subscribe_entity'
-      # robust: params may be ["a,b,c,"] or ["a", "b", "c", ""]
-      raw = params.flatten.compact.join(',')
-      entities = raw.split(',').map { |s| s.to_s.strip }.reject(&:empty?)
-      persist_entities(entities) unless entities.empty?
-      send_json(type: 'subscribe_entities', entity_ids: entities) unless entities.empty?
-
     when 'state_filter'
-      raw = params.flatten.compact.join(',')
-      @filter = raw.split(',').map { |s| s.to_s.strip }.reject(&:empty?)
-      persist_filter(@filter)
-
-      # optional ack (parseable by XML)
+      @filter = params.flatten.compact.reject(&:empty?)
+      @persisted['filter'] = @filter
+      save_state
       send_line("state_filter===ok")
+      return
+    when 'subscribe_entity'
+      entities = params.join(',').split(',').map(&:strip).reject(&:empty?)
+      @persisted['entities'] = entities
+      save_state
+      send_line("subscribe_entity===ok")
+      send_json(type: 'subscribe_entities', entity_ids: entities) unless entities.empty?
+      return
+    when 'subscribe_events'
+      send_line("subscribe_events===ok")
+      send_json(type: 'subscribe_events')
+      return
+    when 'ping'
+      send_line("pong===1")
+      return
+    end
 
+    # comandos tipo acción (dimmer_set, socket_on, etc.)
+    if HassRequests.instance_methods(false).include?(cmd.to_sym)
+      send_line("#{cmd}===ok")
+      send(cmd, *params)
     else
-      if HassRequests.instance_methods(false).include?(cmd.to_sym)
-        send(cmd, *params)
-      else
-        p([:error, [:unknown_cmd, cmd, req]])
-      end
+      send_line("unknown_cmd===#{cmd}")
+      p([:error, :unknown_cmd, cmd, req])
     end
   end
 
-  # ----------- HA WebSocket -----------
+  # ---------------- HA WebSocket side ----------------
   def ensure_em_running
     return if EM.reactor_running?
     @em_mutex.synchronize do
       return if EM.reactor_running?
-      @em_thread ||= Thread.new { EM.run }
+      Thread.new { EM.run }
     end
     50.times { break if EM.reactor_running?; sleep 0.05 }
   end
@@ -370,7 +360,7 @@ end
   def start_ws
     return if @shutdown
     @ha_authed = false
-    @hass_ws = Faye::WebSocket::Client.new(@address)
+    @hass_ws = Faye::WebSocket::Client.new(@ws_url)
 
     @hass_ws.on :open do
       p([:debug, :ws_connected])
@@ -378,13 +368,13 @@ end
     end
 
     @hass_ws.on :message do |event|
-      handle_message(event.data) unless @shutdown
+      handle_ws_message(event.data)
     end
 
     @hass_ws.on :close do |event|
       p([:debug, :ws_disconnected, event.code, event.reason])
       @hass_ws = nil
-      schedule_reconnect unless @shutdown
+      schedule_reconnect
     end
 
     @hass_ws.on :error do |event|
@@ -393,10 +383,11 @@ end
   end
 
   def schedule_reconnect
+    return if @shutdown
     delay = @reconnect_delay
     @reconnect_delay = [@reconnect_delay * 2, RECONNECT_MAX].min
     p([:info, :ws_reconnect_scheduled, delay])
-    add_timer(EM.add_timer(delay) { start_ws })
+    EM.add_timer(delay) { start_ws }
   end
 
   def can_send_ws?
@@ -405,49 +396,51 @@ end
     false
   end
 
-  def handle_message(data)
-    message = JSON.parse(data) rescue nil
-    return unless message
-    return p([:error, [:request_failed, message]]) if message['success'] == false
+  def enqueue_ws(json)
+    @ws_queue << json
+    @ws_queue.shift while @ws_queue.length > WS_QUEUE_MAX
+  end
 
-    case message['type']
-    when 'auth_required'
-      safe_ws_send({ type: 'auth', access_token: @token }.to_json)
-
-    when 'auth_ok'
-      @ha_authed = true
-      p([:info, :ha_ready])
-
-      start_ha_ping
-
-      ents = persisted_entities
-      send_json(type: 'subscribe_entities', entity_ids: ents) unless ents.empty?
-
-      flush_ws_queue
-
-      # IMPORTANT: parseable for XML
-      send_line("ready===ok")
-
-    when 'event'
-      parse_event(message['event'])
-
-    when 'result'
-      parse_result(message)
-
-    when 'pong'
-      p([:debug, :pong_received])
+  def flush_ws_queue
+    return unless @ha_authed && can_send_ws?
+    while (msg = @ws_queue.shift)
+      @hass_ws.send(msg)
     end
+    p([:info, :ws_queue_flushed])
   end
 
   def start_ha_ping
     return if @ha_ping_timer_started
     @ha_ping_timer_started = true
-    add_timer(
-      EM.add_periodic_timer(HA_PING_INTERVAL) do
-        next if @shutdown
-        send_json(type: 'ping')
-      end
-    )
+    EM.add_periodic_timer(HA_PING_INTERVAL) do
+      next if @shutdown
+      send_json(type: 'ping')
+    end
+  end
+
+  def handle_ws_message(data)
+    msg = JSON.parse(data) rescue nil
+    return unless msg
+
+    case msg['type']
+    when 'auth_required'
+      safe_ws_send({ type: 'auth', access_token: @token }.to_json)
+    when 'auth_ok'
+      @ha_authed = true
+      p([:info, :ha_ready])
+      start_ha_ping
+      # restore entities
+      ents = (@persisted['entities'].is_a?(Array) ? @persisted['entities'] : [])
+      send_json(type: 'subscribe_entities', entity_ids: ents) unless ents.empty?
+      flush_ws_queue
+      send_line("ready===ok")
+    when 'event'
+      parse_event(msg['event'])
+    when 'result'
+      parse_result(msg)
+    when 'pong'
+      p([:debug, :pong_received])
+    end
   end
 
   def send_json(hash)
@@ -472,18 +465,7 @@ end
     end
   end
 
-  def enqueue_ws(json)
-    @ws_queue << json
-    @ws_queue.shift while @ws_queue.length > WS_QUEUE_MAX
-  end
-
-  def flush_ws_queue
-    return unless @ha_authed && can_send_ws?
-    @ws_queue.shift.tap { |msg| @hass_ws.send(msg) } while @ws_queue.any?
-    p([:info, :ws_queue_flushed])
-  end
-
-  # ----------- State persistence -----------
+  # ---------------- State persistence ----------------
   def load_state
     JSON.parse(File.read(STATE_FILE)) rescue { 'filter' => nil, 'entities' => [] }
   end
@@ -497,34 +479,13 @@ end
   end
 
   def apply_persisted_defaults
-    if (@filter.nil? || @filter.empty? || @filter == ['all']) &&
-       @persisted['filter'].is_a?(Array) && !@persisted['filter'].empty?
+    if @persisted['filter'].is_a?(Array) && !@persisted['filter'].empty?
       @filter = @persisted['filter']
       p([:info, :filter_restored, @filter])
     end
   end
 
-  def persisted_entities
-    @persisted['entities'].is_a?(Array) ? @persisted['entities'] : []
-  end
-
-  def persist_filter(params)
-    @persisted['filter'] = params
-    save_state
-  end
-
-  def persist_entities(params)
-    @persisted['entities'] = params
-    save_state
-  end
-
-  # ----------- Utils -----------
-  def add_timer(t); @timers << t if t; t; end
-
-  def safe_close_socket(sock)
-    sock&.close rescue nil
-  end
-
+  # ---------------- Socket opts ----------------
   def setup_tcp_keepalive(sock)
     sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_KEEPALIVE, true)
     if Socket.const_defined?(:IPPROTO_TCP)
@@ -535,19 +496,28 @@ end
   rescue => e
     p([:debug, :keepalive_not_set, e.message])
   end
+
+  def safe_close_socket(sock)
+    return unless sock
+    begin
+      sock.close unless sock.closed?
+    rescue
+    end
+  end
 end
 
-# ---------------- TCP Server ----------------
+# -------------
+# TCP Server
+# -------------
 Thread.abort_on_exception = true
 
-core = HassCore.new(WS_URL, WS_TOKEN, ['all'])
+core = HassCore.new(WS_URL, WS_TOKEN)
 
 server = TCPServer.new(TCP_PORT)
-server.setsockopt(Socket::SOL_SOCKET, Socket::SO_REUSEADDR, 1) rescue nil
+server.setsockopt(Socket::SOL_SOCKET, Socket::SO_REUSEADDR, 1)
 p([:info, :server_started, TCP_PORT])
 
 loop do
   client = server.accept
-  p([:info, :client_connected, (client.peeraddr rescue :unknown_peer)])
   core.attach_client(client)
 end
