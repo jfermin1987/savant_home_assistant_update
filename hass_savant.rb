@@ -331,6 +331,12 @@ class SavantConn < EM::Connection
     @profile_id || @client_key
   end
 
+
+  # Back-compat: some proxy versions expect `identity` (profile_id when known, else client_key).
+  def identity
+    current_identity
+  end
+
   private
 
   def handle_line(line)
