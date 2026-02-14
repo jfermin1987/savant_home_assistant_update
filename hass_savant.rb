@@ -364,7 +364,12 @@ class SavantConn < EM::Connection
       @proxy.save_subs(current_identity, subscribe_all: @subscribe_all)
     when 'subscribe_entity'
       ids = args.join(',').split(',').map(&:strip).reject(&:empty?)
-      return if ids.empty?
+      if ids.empty?
+        # Savant sometimes reconnects and sends an empty subscribe_entity.
+        # In that case, restore the last known subscription set for this profile/filter.
+        @proxy.restore_subs_if_empty(current_identity)
+        return
+      end
 
       ids.each { |e| @subs[e] = true }
       @proxy.save_subs(current_identity, add: ids)
@@ -383,7 +388,11 @@ class HassProxy
 
   def initialize(token:, address: HaWs::DEFAULT_WS)
     @clients = {} # conn_id => conn
-    @profiles = {} # profile_id => {filter:[], subs:Set/all}
+    @profiles = {} # identity/profile_id => {filter:[], subs:{}, subscribe_all:bool}
+    @entity_cache = {} # entity_id => packed
+    @subs_by_sig = {} # filter signature => subs hash
+    @identity_to_sig = {}
+    @sig_to_identity = {}
     @last_refresh_at = 0.0
 
     @ha = HaWs.new(token: token, address: address)
@@ -394,36 +403,94 @@ class HassProxy
   def start = @ha.start
 
   def register_client(conn)
-    @clients[conn.client_key] = conn
+    @clients[conn.identity] = conn
   end
 
   def unregister_client(conn)
-    @clients.delete(conn.client_key)
+    @clients.delete(conn.identity)
     # keep profile memory; do NOT stop HA
   end
 
   def bind_profile(conn, profile_id)
     prof = (@profiles[profile_id] ||= { filter: ['state'], subs: {}, subscribe_all: false })
+
+    # Re-key the live connection from its transient client_key to the stable Savant profile_id
+    if @clients[conn.client_key] == conn
+      @clients.delete(conn.client_key)
+    end
+    @clients[profile_id] = conn
+
     conn.bind_profile!(profile_id, restore: { filter: prof[:filter], subs: prof[:subs].keys })
-    # After binding, push a refresh so Savant UI immediately syncs even if entities don't change.
+
+    # Prime UI immediately from cache + force one refresh
+    replay_cached(profile_id)
     request_state_refresh
   end
 
   def save_filter(identity, filter)
     prof = (@profiles[identity] ||= { filter: ['state'], subs: {}, subscribe_all: false })
     prof[:filter] = filter
+
+    sig = Array(filter).map(&:to_s).map(&:strip).reject(&:empty?).sort.join(',')
+    @identity_to_sig[identity] = sig
+
+    # Persist last known subs per filter signature (fallback when Savant reconnects with empty subscribe_entity)
+    @subs_by_sig[sig] = prof[:subs].dup unless prof[:subs].empty?
+
+    prev_id = @sig_to_identity[sig]
+    if prev_id && prev_id != identity
+      prev = @profiles[prev_id]
+      # Try restore from previous identity or signature store
+      restored = nil
+      if prev && prev[:subs] && !prev[:subs].empty?
+        restored = prev[:subs]
+      elsif @subs_by_sig[sig] && !@subs_by_sig[sig].empty?
+        restored = @subs_by_sig[sig]
+      end
+
+      if restored && prof[:subs].empty?
+        prof[:subs] = restored.dup
+        @subs_by_sig[sig] = prof[:subs].dup
+        log(:info, :subs_restored_by_filter, sig, prof[:subs].length)
+        @ha.ensure_subscribed(prof[:subs].keys)
+        replay_cached(identity)
+        request_state_refresh
+      end
+    end
+
+    @sig_to_identity[sig] = identity
     log(:info, :filter_set, identity, filter)
   end
 
-  def save_subs(identity, add: nil, subscribe_all: nil)
+def save_subs(identity, add: nil, subscribe_all: nil)
     prof = (@profiles[identity] ||= { filter: ['state'], subs: {}, subscribe_all: false })
     if subscribe_all != nil
       prof[:subscribe_all] = !!subscribe_all
     end
     Array(add).each { |e| prof[:subs][e] = true } if add
+
+    # keep signature store updated
+    sig = @identity_to_sig[identity]
+    @subs_by_sig[sig] = prof[:subs].dup if sig && !prof[:subs].empty?
   end
 
-  def ensure_ha_subscribed(entity_ids)
+  def restore_subs_if_empty(identity)
+    prof = (@profiles[identity] ||= { filter: ['state'], subs: {}, subscribe_all: false })
+    return false unless prof[:subs].empty? && !prof[:subscribe_all]
+
+    sig = @identity_to_sig[identity]
+    stored = sig ? @subs_by_sig[sig] : nil
+    return false unless stored && !stored.empty?
+
+    prof[:subs] = stored.dup
+    log(:info, :subs_restored, identity, prof[:subs].length)
+    @ha.ensure_subscribed(prof[:subs].keys)
+    replay_cached(identity)
+    request_state_refresh
+    true
+  end
+
+def ensure_ha_subscribed(entity_ids)
     @ha.ensure_subscribed(entity_ids)
     request_state_refresh
   end
@@ -474,6 +541,20 @@ class HassProxy
 
   private
 
+  def replay_cached(identity)
+    prof = @profiles[identity]
+    return unless prof && !prof[:subs].empty?
+
+    client = @clients[identity]
+    return unless client
+
+    prof[:subs].keys.each do |entity_id|
+      packed = @entity_cache[entity_id]
+      next unless packed
+      forward_entity_to_client(client, entity_id, packed, prof[:filter])
+    end
+  end
+
   def service_call(domain, service, entity, service_data = nil)
     return if entity.to_s.strip.empty?
 
@@ -516,31 +597,43 @@ class HassProxy
   end
 
   def forward_entity(entity_id, packed)
-    state = packed['s']
-    attrs = packed['a'] || {}
+    # cache last known state so a newly-connected Savant profile can be primed immediately
+    @entity_cache[entity_id] = packed
 
     @clients.each_value do |client|
       next unless client.subscribed_to?(entity_id)
 
-      client.filter.each do |k|
-        case k
-        when 'state'
-          client.send_update(entity_id, 'state', state) unless state.nil?
-        when 'attributes'
-          client.send_update(entity_id, 'attributes', JSON.generate(attrs))
-        else
-          v = attrs[k]
-          client.send_update(entity_id, k, v) unless v.nil?
-        end
-      end
+      # use the *profile* filter if we have it (so we can restore by signature accurately)
+      identity = client.respond_to?(:identity) ? client.identity : client.client_key
+      prof = @profiles[identity]
+      filter = prof ? prof[:filter] : client.filter
 
-      # HVAC UI helpers (some XMLs bind to these explicitly)
-      if entity_id.start_with?('climate.')
-        hvac_mode = attrs['hvac_mode']
-        hvac_action = attrs['hvac_action']
-        client.send_update(entity_id, 'hvac_mode', hvac_mode) if hvac_mode
-        client.send_update(entity_id, 'hvac_action', hvac_action) if hvac_action
+      forward_entity_to_client(client, entity_id, packed, filter)
+    end
+  end
+
+  def forward_entity_to_client(client, entity_id, packed, filter)
+    state = packed['s']
+    attrs = packed['a'] || {}
+
+    Array(filter).each do |k|
+      case k
+      when 'state'
+        client.send_update(entity_id, 'state', state) unless state.nil?
+      when 'attributes'
+        client.send_update(entity_id, 'attributes', JSON.generate(attrs))
+      else
+        v = attrs[k]
+        client.send_update(entity_id, k, v) unless v.nil?
       end
+    end
+
+    # HVAC UI helpers (some XMLs bind to these explicitly)
+    if entity_id.start_with?('climate.')
+      hvac_mode = attrs['hvac_mode']
+      hvac_action = attrs['hvac_action']
+      client.send_update(entity_id, 'hvac_mode', hvac_mode) if hvac_mode
+      client.send_update(entity_id, 'hvac_action', hvac_action) if hvac_action
     end
   end
 end
