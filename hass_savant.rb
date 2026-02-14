@@ -50,6 +50,8 @@ class HaWs
     @id_mutex = Mutex.new
 
     @send_queue = []
+
+    @pending_get_states = {}  # id => true
     @reconnect_attempt = 0
     @reconnect_timer = nil
     @ping_timer = nil
@@ -108,7 +110,9 @@ class HaWs
   end
 
   def get_states
-    send_json(type: 'get_states')
+    id = next_id
+    @pending_get_states[id] = true
+    send_json(type: 'get_states', id: id)
   end
 
   private
@@ -149,6 +153,8 @@ class HaWs
 
     q = @send_queue
     @send_queue = []
+
+    @pending_get_states = {}  # id => true
     q.each(&:call)
     log(:info, :ws_queue_flushed)
   end
@@ -379,7 +385,7 @@ class SavantConn < EM::Connection
 
       ids.each { |e| @subs[e] = true }
       @proxy.save_subs(current_identity, add: ids)
-      @proxy.ensure_ha_subscribed(ids)
+      @proxy.on_client_subscribe(current_identity, ids)
     else
       @proxy.handle_action(cmd, args)
     end
@@ -394,7 +400,8 @@ class HassProxy
 
   def initialize(token:, address: HaWs::DEFAULT_WS)
     @clients = {} # conn_id => conn
-    @profiles = {} # identity/profile_id => {filter:[], subs:{}, subscribe_all:bool}
+    @profiles = {}
+    @last_filter_value = {} # identity/profile_id => {filter:[], subs:{}, subscribe_all:bool}
     @entity_cache = {} # entity_id => packed
     @subs_by_sig = {} # filter signature => subs hash
     @identity_to_sig = {}
@@ -465,7 +472,11 @@ class HassProxy
     end
 
     @sig_to_identity[sig] = identity
-    log(:info, :filter_set, identity, filter)
+    prev = @last_filter_value[identity]
+    if prev != filter
+      @last_filter_value[identity] = filter
+      log(:info, :filter_set, identity, filter)
+    end
   end
 
 def save_subs(identity, add: nil, subscribe_all: nil)
@@ -494,6 +505,14 @@ def save_subs(identity, add: nil, subscribe_all: nil)
     replay_cached(identity)
     request_state_refresh
     true
+  end
+
+
+  def on_client_subscribe(identity, entity_ids)
+    ensure_ha_subscribed(entity_ids)
+    # Even if HA was already subscribed globally, new Savant profiles need an immediate
+    # snapshot so their UI doesn't stay stale until the next HA state change.
+    replay_cached(identity, only: entity_ids)
   end
 
 def ensure_ha_subscribed(entity_ids)
@@ -547,7 +566,7 @@ def ensure_ha_subscribed(entity_ids)
 
   private
 
-  def replay_cached(identity)
+  def replay_cached(identity, only: nil)
     prof = @profiles[identity]
     return unless prof && !prof[:subs].empty?
 
@@ -584,6 +603,11 @@ def ensure_ha_subscribed(entity_ids)
   end
 
   def handle_ha_event(msg)
+    if msg['type'] == 'get_states' && msg['states'].is_a?(Hash)
+      msg['states'].each { |eid, packed| forward_entity(eid, packed) }
+      return
+    end
+
     ev = msg['event'] || {}
 
     # subscribe_entities events:
