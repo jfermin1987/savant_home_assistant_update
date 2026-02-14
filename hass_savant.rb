@@ -50,8 +50,6 @@ class HaWs
     @id_mutex = Mutex.new
 
     @send_queue = []
-
-    @pending_get_states = {}  # id => true
     @reconnect_attempt = 0
     @reconnect_timer = nil
     @ping_timer = nil
@@ -153,8 +151,6 @@ class HaWs
 
     q = @send_queue
     @send_queue = []
-
-    @pending_get_states = {}  # id => true
     q.each(&:call)
     log(:info, :ws_queue_flushed)
   end
@@ -237,8 +233,22 @@ class HaWs
       @on_event&.call(msg)
     when 'pong'
       log(:debug, :pong)
-    when 'result'
-      log(:error, :request_failed, msg) unless msg['success']
+when 'result'
+  if msg['success']
+    # If this was a get_states snapshot we requested, convert the array of states
+    # into our compact packed format and hand to the proxy as a synthetic event.
+    if @pending_get_states.delete(msg['id']) && msg['result'].is_a?(Array)
+      states = {}
+      msg['result'].each do |st|
+        eid = st['entity_id']
+        next unless eid
+        states[eid] = { 's' => st['state'], 'a' => (st['attributes'] || {}) }
+      end
+      @on_event&.call({ 'type' => 'get_states', 'states' => states })
+    end
+  else
+    log(:error, :request_failed, msg)
+  end
     end
   end
 
