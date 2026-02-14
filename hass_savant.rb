@@ -1,551 +1,550 @@
-WS_TOKEN = ENV['SUPERVISOR_TOKEN']
-WS_URL   = "ws://supervisor/core/api/websocket"
-TCP_PORT = (ENV['TCP_PORT'] || '8080').to_i
+#!/usr/bin/env ruby
+# frozen_string_literal: true
 
-require 'socket'
+# Savant <-> Home Assistant TCP proxy
+# - Multi-client: supports multiple Savant profiles connecting simultaneously (lights, HVAC, locks, shades)
+# - Single HA WebSocket: shared connection, subscriptions aggregated
+# - Per-client filters/subscriptions so profiles don't stomp each other
+# - Monotonic, thread-safe HA request IDs (fixes id_reuse)
+# - Robust HA reconnect with exponential backoff and queue
+
 require 'json'
-require 'faye/websocket'
 require 'eventmachine'
+require 'faye/websocket'
+require 'uri'
 require 'securerandom'
 
-module HassMessageParsingMethods
-  def new_data(js_data)
-    return {} unless js_data['data']
-    js_data['data']['new_state'] || js_data['data']
-  end
+# -------------------------
+# Logging helpers
+# -------------------------
 
-  def parse_event(js_data)
-    return entities_changed(js_data['c']) if js_data.keys == ['c']
-    return entities_changed(js_data['a']) if js_data.keys == ['a']
-
-    case js_data['event_type']
-    when 'state_changed' then parse_state(new_data(js_data))
-    when 'call_service'  then parse_service(new_data(js_data))
-    else
-      [:unknown, js_data['event_type']]
-    end
-  end
-
-  def entities_changed(entities)
-    entities.each do |entity, state|
-      state = state['+'] if state.is_a?(Hash) && state.key?('+')
-      attributes = state['a'] if state.is_a?(Hash)
-      value      = state['s'] if state.is_a?(Hash)
-
-      update?("#{entity}_state", 'state', value) if value
-      update_with_hash(entity, attributes) if attributes
-    end
-  end
-
-  def parse_service(data)
-    return [] unless data['service_data'] && data['service_data']['entity_id']
-    [data['service_data']['entity_id']].flatten.compact.map do |entity|
-      "type:call_service,entity:#{entity},service:#{data['service']},domain:#{data['domain']}"
-    end
-  end
-
-  def included_with_filter?(primary_key)
-    return true if @filter.empty? || @filter == ['all']
-    @filter.include?(primary_key)
-  end
-
-  def parse_state(message)
-    eid = message['entity_id']
-    update?("#{eid}_state", 'state', message['state']) if eid
-
-    atr = message['attributes']
-    case atr
-    when Hash  then update_with_hash(eid, atr)
-    when Array then update_with_array(eid, atr)
-    end
-  end
-
-  def update?(key, primary_key, value)
-    return unless value && included_with_filter?(primary_key)
-    value = 3 if primary_key == 'brightness' && [1, 2].include?(value)
-    send_to_savant("#{key}===#{value}")
-  end
-
-  def update_hashed_array(parent_key, msg_array)
-    msg_array.each_with_index do |e, i|
-      key = "#{parent_key}_#{i}"
-      case e
-      when Hash  then update_with_hash(key, e)
-      when Array then update_with_array(key, e)
-      else
-        update?(key, i, e)
-      end
-    end
-  end
-
-  def update_with_array(parent_key, msg_array)
-    return update_hashed_array(parent_key, msg_array) if msg_array.first.is_a?(Hash)
-    update?(parent_key, parent_key, msg_array.join(','))
-  end
-
-  def update_with_hash(parent_key, msg_hash)
-    arr = msg_hash.map do |k, v|
-      update?("#{parent_key}_#{k}", k, v) if included_with_filter?(k)
-      "#{k}:#{v}"
-    end
-    return unless included_with_filter?('attributes')
-    update?("#{parent_key}_attributes", parent_key, arr.join(','))
-  end
-
-  def parse_result(js_data)
-    res = js_data['result']
-    return unless res
-    return parse_state(res) unless res.is_a?(Array)
-    res.each { |e| parse_state(e) }
-  end
+def log(*args)
+  $stdout.sync = true
+  p(args)
 end
 
-module HassRequests
-  def fan_on(entity_id, speed)
-    send_data(type: :call_service, domain: :fan, service: :turn_on, service_data: { speed: speed }, target: { entity_id: entity_id })
-  end
-  def fan_off(entity_id, _speed=nil)
-    send_data(type: :call_service, domain: :fan, service: :turn_off, target: { entity_id: entity_id })
-  end
-  def fan_set(entity_id, speed)
-    speed.to_i.zero? ? fan_off(entity_id) : fan_on(entity_id, speed)
-  end
+# -------------------------
+# HA WebSocket client
+# -------------------------
+class HaWs
+  DEFAULT_WS = 'ws://supervisor/core/api/websocket'
 
-  def switch_on(entity_id)
-    send_data(type: :call_service, domain: :light, service: :turn_on, target: { entity_id: entity_id })
-  end
-  def switch_off(entity_id)
-    send_data(type: :call_service, domain: :light, service: :turn_off, target: { entity_id: entity_id })
-  end
-
-  def dimmer_on(entity_id, level)
-    send_data(type: :call_service, domain: :light, service: :turn_on, service_data: { brightness_pct: level }, target: { entity_id: entity_id })
-  end
-  def dimmer_off(entity_id)
-    send_data(type: :call_service, domain: :light, service: :turn_off, target: { entity_id: entity_id })
-  end
-  def dimmer_set(entity_id, level)
-    level.to_i.zero? ? dimmer_off(entity_id) : dimmer_on(entity_id, level)
-  end
-
-  def shade_set(entity_id, level)
-    send_data(type: :call_service, domain: :cover, service: :set_cover_position, service_data: { position: level }, target: { entity_id: entity_id })
-  end
-
-  def lock_lock(entity_id)
-    send_data(type: :call_service, domain: :lock, service: :lock, target: { entity_id: entity_id })
-  end
-  def unlock_lock(entity_id)
-    send_data(type: :call_service, domain: :lock, service: :unlock, target: { entity_id: entity_id })
-  end
-
-  def open_garage_door(entity_id)
-    send_data(type: :call_service, domain: :cover, service: :open_cover, target: { entity_id: entity_id })
-  end
-  def close_garage_door(entity_id)
-    send_data(type: :call_service, domain: :cover, service: :close_cover, target: { entity_id: entity_id })
-  end
-  def toggle_garage_door(entity_id)
-    send_data(type: :call_service, domain: :cover, service: :toggle, target: { entity_id: entity_id })
-  end
-
-  def button_press(entity_id)
-    send_data(type: :call_service, domain: :button, service: :press, target: { entity_id: entity_id })
-  end
-
-  def socket_on(entity_id)
-    send_data(type: :call_service, domain: :switch, service: :turn_on, target: { entity_id: entity_id })
-  end
-  def socket_off(entity_id)
-    send_data(type: :call_service, domain: :switch, service: :turn_off, target: { entity_id: entity_id })
-  end
-
-  def climate_set_hvac_mode(entity_id, mode)
-    send_data(type: :call_service, domain: :climate, service: :set_hvac_mode, service_data: { hvac_mode: mode }, target: { entity_id: entity_id })
-  end
-  def climate_set_single(entity_id, level)
-    send_data(type: :call_service, domain: :climate, service: :set_temperature, service_data: { temperature: level }, target: { entity_id: entity_id })
-  end
-  def climate_set_low(entity_id, low_level)
-    send_data(type: :call_service, domain: :climate, service: :set_temperature, service_data: { target_temp_low: low_level }, target: { entity_id: entity_id })
-  end
-  def climate_set_high(entity_id, high_level)
-    send_data(type: :call_service, domain: :climate, service: :set_temperature, service_data: { target_temp_high: high_level }, target: { entity_id: entity_id })
-  end
-end
-
-class HassCore
-  include HassMessageParsingMethods
-  include HassRequests
-
-  POSTFIX = "\n"
-  STATE_FILE = ENV['STATE_FILE'] || '/data/savant_hass_proxy_state.json'
-  HA_PING_INTERVAL = (ENV['HA_PING_INTERVAL'] || '30').to_i
-  SAVANT_HEARTBEAT_INTERVAL = (ENV['SAVANT_HEARTBEAT_INTERVAL'] || '5').to_i
-  SAVANT_HELLO_INTERVAL = (ENV['SAVANT_HELLO_INTERVAL'] || '10').to_i
-  RECONNECT_MIN = (ENV['HA_RECONNECT_MIN'] || '1').to_i
-  RECONNECT_MAX = (ENV['HA_RECONNECT_MAX'] || '30').to_i
-  WS_QUEUE_MAX  = (ENV['WS_QUEUE_MAX'] || '200').to_i
-
-  Client = Struct.new(:id, :sock, :write_mutex)
-
-  def initialize(hass_address, token)
-    @address = hass_address
+  def initialize(token:, address: DEFAULT_WS)
     @token = token
+    @address = address
 
-    @shutdown = false
-    @ha_authed = false
-    @id = 0
-    @ws_queue = []
-    @reconnect_delay = RECONNECT_MIN
-    @ha_ping_timer_started = false
+    @ws = nil
+    @ws_ready = false
 
-    @clients = {}
-    @clients_mutex = Mutex.new
+    @next_id = 0
+    @id_mutex = Mutex.new
 
-    @filter = ['all']
-    @persisted = load_state
-    apply_persisted_defaults
+    @send_queue = []
+    @reconnect_attempt = 0
+    @reconnect_timer = nil
+    @ping_timer = nil
 
-    ensure_em_running
-    start_periodics
-    connect_websocket
+    @subscribed_entities = {} # entity_id => true
+
+    @on_event = nil
+    @on_ready = nil
   end
 
-  def add_client(sock)
-    c = Client.new(SecureRandom.hex(4), sock, Mutex.new)
-    setup_tcp_keepalive(sock)
-    @clients_mutex.synchronize { @clients[c.id] = c }
-    p([:info, :client_connected, sock.peeraddr, c.id])
+  attr_reader :subscribed_entities
 
-    # handshake
-    safe_send_client(c, 'hello,proxy=ha_savant,proto=1')
-    safe_send_client(c, (@ha_authed ? 'ready,ha=ok' : 'ready,ha=connecting'))
+  def on_event(&blk) = (@on_event = blk)
+  def on_ready(&blk) = (@on_ready = blk)
 
-    # reader thread
-    Thread.new do
-      begin
-        loop do
-          line = sock.gets
-          break unless line
-          line = line.chomp
-          next if line.empty?
-          p([:debug, :from_savant, c.id, line])
-          from_savant(line, c)
-        end
-      rescue IOError, SystemCallError => e
-        p([:error, :savant_read_error, c.id, e.class.to_s, e.message])
-      ensure
-        remove_client(c.id)
-      end
+  def start
+    connect
+  end
+
+  def stop
+    @ws_ready = false
+    @ping_timer&.cancel
+    @ping_timer = nil
+    @reconnect_timer&.cancel
+    @reconnect_timer = nil
+
+    begin
+      @ws&.close(1000, '')
+    rescue StandardError
+      # ignore
     end
-
-    c
+    @ws = nil
   end
 
-  def remove_client(id)
-    c = nil
-    @clients_mutex.synchronize { c = @clients.delete(id) }
-    return unless c
-    p([:info, :client_disconnected, id])
-    begin; c.sock.close; rescue; end
+  def ready? = @ws_ready
+
+  def ensure_subscribed(entity_ids)
+    ids = Array(entity_ids).compact.map(&:strip).reject(&:empty?)
+    return if ids.empty?
+
+    # only subscribe to entities we haven't subscribed to yet (global set)
+    new_ids = ids.reject { |e| @subscribed_entities[e] }
+    return if new_ids.empty?
+
+    new_ids.each { |e| @subscribed_entities[e] = true }
+
+    # HA supports incremental subscribe_entities calls.
+    send_json(type: 'subscribe_entities', entity_ids: new_ids)
   end
 
-  def send_to_savant(message)
-    broadcast(message)
-  end
-
-  def broadcast(message)
-    msg = map_message([message]).join
-    dead = []
-    @clients_mutex.synchronize do
-      @clients.each_value do |c|
-        begin
-          c.write_mutex.synchronize { c.sock.write(msg) }
-        rescue
-          dead << c.id
-        end
-      end
-    end
-    dead.each { |id| remove_client(id) }
-  end
-
-  def shutdown!
-    return if @shutdown
-    @shutdown = true
-    begin; @hass_ws&.close; rescue; end
-    ids = []
-    @clients_mutex.synchronize { ids = @clients.keys }
-    ids.each { |id| remove_client(id) }
+  def call_service(domain:, service:, entity_id:, service_data: nil)
+    payload = {
+      type: 'call_service',
+      domain: domain.to_s,
+      service: service.to_s,
+      target: { entity_id: entity_id.to_s }
+    }
+    payload[:service_data] = service_data if service_data && !service_data.empty?
+    send_json(payload)
   end
 
   private
 
-  def load_state
-    JSON.parse(File.read(STATE_FILE)) rescue { 'filter' => nil, 'entities' => [] }
-  end
-
-  def save_state
-    dir = File.dirname(STATE_FILE)
-    Dir.mkdir(dir) unless Dir.exist?(dir)
-    File.write(STATE_FILE, @persisted.to_json)
-  rescue => e
-    p([:error, :state_save_failed, e.message])
-  end
-
-  def apply_persisted_defaults
-    if (@filter.nil? || @filter.empty? || @filter == ['all']) && @persisted['filter'].is_a?(Array) && !@persisted['filter'].empty?
-      @filter = @persisted['filter']
-      p([:info, :filter_restored, @filter])
+  def next_id
+    @id_mutex.synchronize do
+      @next_id += 1
+      @next_id
     end
   end
 
-  def persisted_entities
-    @persisted['entities'].is_a?(Array) ? @persisted['entities'] : []
-  end
-
-  def persist_filter(params)
-    @persisted['filter'] = params
-    save_state
-  end
-
-  def persist_entities(params)
-    @persisted['entities'] = params
-    save_state
-  end
-
-  def start_periodics
-    em_add_periodic_timer(SAVANT_HELLO_INTERVAL) do
-      broadcast('hello,proxy=ha_savant,proto=1')
+  def send_json(payload)
+    # Assign id at send-time (NOT at enqueue-time) to avoid id reuse/out-of-order
+    op = lambda do
+      payload = payload.dup
+      payload[:id] ||= next_id
+      json = JSON.generate(payload)
+      @ws.send(json)
+      log(:debug, [:send, json])
+    rescue StandardError => e
+      log(:error, :ws_send_error, e.class.name, e.message)
     end
-    em_add_periodic_timer(SAVANT_HEARTBEAT_INTERVAL) do
-      broadcast('heartbeat===1')
+
+    if @ws_ready && @ws
+      op.call
+    else
+      @send_queue << op
+      log(:debug, :ws_queued, @send_queue.length)
     end
   end
 
-  def em_add_timer(seconds, &blk)
-    ensure_em_running
-    EM.add_timer(seconds, &blk)
+  def flush_queue
+    return unless @ws_ready && @ws
+
+    q = @send_queue
+    @send_queue = []
+    q.each(&:call)
+    log(:info, :ws_queue_flushed)
   end
 
-  def em_add_periodic_timer(seconds, &blk)
-    ensure_em_running
-    EM.add_periodic_timer(seconds, &blk)
-  end
+  def connect
+    log(:debug, :connecting_to, @address)
 
-  def ensure_em_running
-    return if EM.reactor_running?
-    @em_mutex ||= Mutex.new
-    @em_mutex.synchronize do
-      return if EM.reactor_running?
-      @em_thread ||= Thread.new { EM.run }
-    end
-    50.times { break if EM.reactor_running?; sleep 0.05 }
-  end
+    @ws_ready = false
+    @ws = Faye::WebSocket::Client.new(@address)
 
-  def connect_websocket
-    EM.schedule { start_ws }
-  end
-
-  def start_ws
-    return if @shutdown
-    @ha_authed = false
-    @hass_ws = Faye::WebSocket::Client.new(@address)
-
-    @hass_ws.on :open do |_event|
-      p([:debug, :ws_connected])
-      @reconnect_delay = RECONNECT_MIN
+    @ws.on(:open) do |_|
+      log(:debug, :ws_connected)
+      @reconnect_attempt = 0
+      @reconnect_timer&.cancel
+      @reconnect_timer = nil
+      schedule_ping
     end
 
-    @hass_ws.on :message do |event|
-      handle_message(event.data)
+    @ws.on(:message) do |event|
+      begin
+        handle_message(event.data)
+      rescue StandardError => e
+        log(:error, :ws_message_error, e.class.name, e.message)
+      end
     end
 
-    @hass_ws.on :close do |event|
-      p([:debug, :ws_disconnected, event.code, event.reason])
-      @hass_ws = nil
+    @ws.on(:close) do |event|
+      code = event.code
+      reason = event.reason
+      log(:debug, :ws_disconnected, code, reason)
+      @ws_ready = false
+      @ws = nil
       schedule_reconnect
-      broadcast('ready,ha=connecting')
     end
 
-    @hass_ws.on :error do |event|
-      p([:error, :ws_error, event.message])
+    @ws.on(:error) do |event|
+      # faye-websocket puts string in event.message sometimes
+      msg = event.respond_to?(:message) ? event.message : event.to_s
+      log(:error, :ws_error, msg)
+      # Let :close handler do reconnect
     end
+  rescue StandardError => e
+    log(:error, :ws_connect_error, e.class.name, e.message)
+    schedule_reconnect
   end
 
   def schedule_reconnect
-    return if @shutdown
-    delay = @reconnect_delay
-    @reconnect_delay = [@reconnect_delay * 2, RECONNECT_MAX].min
-    p([:info, :ws_reconnect_scheduled, delay])
-    em_add_timer(delay) { start_ws }
-  end
+    return if @reconnect_timer
 
-  def can_send_ws?
-    @hass_ws && @hass_ws.ready_state == Faye::WebSocket::API::OPEN
-  rescue
-    false
-  end
-
-  def enqueue_ws(json)
-    @ws_queue << json
-    @ws_queue.shift while @ws_queue.length > WS_QUEUE_MAX
-    p([:debug, :ws_queued, @ws_queue.length])
-  end
-
-  def flush_ws_queue
-    return unless @ha_authed && can_send_ws?
-    while (msg = @ws_queue.shift)
-      @hass_ws.send(msg)
-    end
-    p([:info, :ws_queue_flushed])
-  end
-
-  def start_ha_ping
-    return if @ha_ping_timer_started
-    @ha_ping_timer_started = true
-    EM.add_periodic_timer(HA_PING_INTERVAL) do
-      send_json(type: 'ping')
+    @reconnect_attempt += 1
+    # exp backoff: 1,2,4,8,16,30...
+    delay = [2**(@reconnect_attempt - 1), 30].min.to_f
+    log(:info, :ws_reconnect_scheduled, delay)
+    @reconnect_timer = EM.add_timer(delay) do
+      @reconnect_timer = nil
+      connect
     end
   end
 
-  def hass_request?(cmd)
-    HassRequests.instance_methods(false).include?(cmd.to_sym)
-  end
-
-  def from_savant(req, client)
-    cmd, *params = req.split(',')
-    case cmd
-    when 'pong'
-      p([:debug, :savant_pong, client.id])
-    when 'subscribe_events'
-      send_json(type: 'subscribe_events')
-      safe_send_client(client, 'subscribe_events===ok')
-    when 'subscribe_entity'
-      entities = params.flatten.compact.map(&:strip).reject(&:empty?)
-      if entities.empty?
-        # Savant a veces manda subscribe_entity, vacío. Respondemos ok igual.
-        safe_send_client(client, 'subscribe_entity===ok')
-        return
-      end
-      persist_entities(entities)
-      send_json(type: 'subscribe_entities', entity_ids: entities)
-      safe_send_client(client, 'subscribe_entity===ok')
-    when 'state_filter'
-      @filter = params.flatten.compact.map(&:strip).reject(&:empty?)
-      persist_filter(@filter)
-      safe_send_client(client, 'state_filter===ok')
-    else
-      if hass_request?(cmd)
-        send(cmd, *params)
-      else
-        p([:error, :unknown_cmd, cmd, req])
+  def schedule_ping
+    @ping_timer&.cancel
+    @ping_timer = EM.add_periodic_timer(30) do
+      begin
+        @ws&.ping
+      rescue StandardError
+        # ignore
       end
     end
   end
 
   def handle_message(data)
-    message = JSON.parse(data) rescue nil
-    return unless message
-    return p([:error, :request_failed, message]) if message['success'] == false
-    handle_hash(message)
-  end
+    msg = JSON.parse(data)
+    log(:debug, [:handling, msg])
 
-  def after_auth_ok
-    p([:info, :ha_ready])
-    start_ha_ping
-
-    ents = persisted_entities
-    if !ents.empty?
-      p([:info, :restoring_subscriptions, ents.length])
-      send_json(type: 'subscribe_entities', entity_ids: ents)
-    end
-
-    flush_ws_queue
-    broadcast('ready,ha=ok')
-  end
-
-  def handle_hash(message)
-    case message['type']
-    when 'auth_required' then send_auth
+    case msg['type']
+    when 'auth_required'
+      send_json(type: 'auth', access_token: @token)
     when 'auth_ok'
-      @ha_authed = true
-      after_auth_ok
-    when 'event'  then parse_event(message['event'])
-    when 'result' then parse_result(message)
-    when 'pong'   then p([:debug, :pong_received])
-    end
-  end
-
-  def send_auth
-    auth_message = { type: 'auth', access_token: @token }.to_json
-    safe_ws_send(auth_message)
-  end
-
-  def send_data(**data)
-    p([:info, :ha_service_call, data[:domain].to_s, data[:service].to_s, (data.dig(:target, :entity_id) || data.dig(:service_data, :entity_id)), (data[:service_data] || {})])
-    send_json(data)
-  end
-
-  def send_json(hash)
-    @id += 1
-    hash['id'] = @id
-    json = hash.to_json
-    if @ha_authed && can_send_ws?
-      safe_ws_send(json)
-    else
-      enqueue_ws(json)
-    end
-  end
-
-  def safe_ws_send(json)
-    EM.schedule do
-      if can_send_ws?
-        @hass_ws.send(json)
-      else
-        enqueue_ws(json)
+      @ws_ready = true
+      log(:info, :ha_ready)
+      # On reconnect, resubscribe everything we knew about
+      restore_subscriptions
+      flush_queue
+      @on_ready&.call
+    when 'event'
+      @on_event&.call(msg)
+    when 'pong'
+      log(:debug, :pong_received)
+    when 'result'
+      unless msg['success']
+        log(:error, :request_failed, msg)
       end
     end
   end
 
-  def setup_tcp_keepalive(sock)
-    sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_KEEPALIVE, true)
-    if Socket.const_defined?(:IPPROTO_TCP)
-      sock.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_KEEPIDLE, 30)  if Socket.const_defined?(:TCP_KEEPIDLE)
-      sock.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_KEEPINTVL, 10) if Socket.const_defined?(:TCP_KEEPINTVL)
-      sock.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_KEEPCNT, 3)    if Socket.const_defined?(:TCP_KEEPCNT)
+  def restore_subscriptions
+    ids = @subscribed_entities.keys
+    log(:info, :restoring_subscriptions, ids.length)
+    return if ids.empty?
+
+    # Re-subscribe in chunks to keep payload small
+    ids.each_slice(200) do |chunk|
+      send_json(type: 'subscribe_entities', entity_ids: chunk)
     end
-  rescue => e
-    p([:debug, :keepalive_not_set, e.message])
-  end
-
-  def map_message(message)
-    Array(message).map do |m|
-      next unless m
-      [m.to_s.gsub(POSTFIX, ''), POSTFIX]
-    end.compact
-  end
-
-  def safe_send_client(client, message)
-    msg = map_message([message]).join
-    client.write_mutex.synchronize { client.sock.write(msg) }
-  rescue
-    remove_client(client.id)
   end
 end
 
-Thread.abort_on_exception = true
+# -------------------------
+# Savant client connection
+# -------------------------
+class SavantConn < EM::Connection
+  attr_reader :client_key
 
-def start_tcp_server(hass_address, token, port)
-  server = TCPServer.new(port)
-  p([:info, :server_started, port])
+  def initialize(proxy)
+    super()
+    @proxy = proxy
+    @buf = +''
+    @client_key = SecureRandom.hex(4) # 8 hex chars
 
-  core = HassCore.new(hass_address, token)
+    @filter = ['state']
+    @subs = {}
+    @subscribe_all = false
+  end
 
-  loop do
-    sock = server.accept
-    core.add_client(sock)
+  def post_init
+    log(:info, :client_connected, Socket.unpack_sockaddr_in(get_peername).reverse, @client_key)
+    @proxy.register_client(self)
+  end
+
+  def unbind
+    log(:info, :client_disconnected, @client_key)
+    @proxy.unregister_client(self)
+  end
+
+  def receive_data(data)
+    @buf << data
+    while (idx = @buf.index("\n"))
+      line = @buf.slice!(0, idx + 1).strip
+      next if line.empty?
+      handle_line(line)
+    end
+  rescue StandardError => e
+    log(:error, :savant_receive_error, e.class.name, e.message)
+  end
+
+  def send_update(entity_id, key, value)
+    # Match RPM xml expectations: <entity>_<key>===<value>\n
+    msg = "#{entity_id}_#{key}===#{value}\n"
+    send_data(msg)
+  rescue StandardError => e
+    log(:error, :savant_send_error, e.class.name, e.message)
+  end
+
+  def subscribed_to?(entity_id)
+    @subscribe_all || @subs[entity_id]
+  end
+
+  def filter
+    @filter
+  end
+
+  def subscriptions
+    @subs.keys
+  end
+
+  private
+
+  def handle_line(line)
+    # Support optional prefix client_id used by some builds:
+    #   <8hex>,command,...
+    parts = line.split(',')
+    if parts[0] =~ /^[0-9a-f]{8}$/i && parts.length >= 2
+      # ignore provided token; we use per-connection key
+      cmd = parts[1]
+      args = parts[2..]
+    else
+      cmd = parts[0]
+      args = parts[1..]
+    end
+
+    log(:debug, :from_savant, @client_key, line)
+
+    case cmd
+    when 'hello'
+      # ignore
+    when 'heartbeat'
+      # ignore
+    when 'state_filter'
+      @filter = args.join(',').split(',').map { |s| s.strip }.reject(&:empty?)
+      @filter = ['state'] if @filter.empty?
+      @proxy.save_filter(@client_key, @filter)
+    when 'subscribe_all_events'
+      @subscribe_all = (args.first.to_s.strip.upcase == 'YES')
+    when 'subscribe_entity'
+      ids = args.join(',').split(',').map(&:strip).reject(&:empty?)
+      ids.each { |e| @subs[e] = true }
+      @proxy.ensure_ha_subscribed(ids)
+    else
+      # Actions
+      @proxy.handle_action(cmd, args)
+    end
   end
 end
 
-start_tcp_server(WS_URL, WS_TOKEN, TCP_PORT)
+# -------------------------
+# Main proxy
+# -------------------------
+class HassProxy
+  def initialize(token:, address: HaWs::DEFAULT_WS)
+    @clients = {}
+    @last_filter_by_client = {}
+
+    @ha = HaWs.new(token: token, address: address)
+    @ha.on_event { |msg| handle_ha_event(msg) }
+  end
+
+  def start
+    @ha.start
+  end
+
+  def register_client(conn)
+    @clients[conn.client_key] = conn
+    # restore previous filter for this key if any (rare; keys change per connection)
+    if (f = @last_filter_by_client[conn.client_key])
+      # no direct setter; client will send its state_filter anyway
+    end
+  end
+
+  def unregister_client(conn)
+    @clients.delete(conn.client_key)
+    # IMPORTANT: do NOT shutdown HA WS on client disconnect (multi-profile stability)
+  end
+
+  def save_filter(client_key, filter)
+    @last_filter_by_client[client_key] = filter
+    log(:info, :filter_set, client_key, filter)
+  end
+
+  def ensure_ha_subscribed(entity_ids)
+    @ha.ensure_subscribed(entity_ids)
+    # After subscribe, ask HA for an immediate state dump so UI updates even if
+    # the entity doesn't change for a while.
+    request_state_refresh(entity_ids)
+  end
+
+  def handle_action(cmd, args)
+    # cmd examples:
+    # - socket_on,<entity>
+    # - socket_off,<entity>
+    # - lock_lock,<entity>
+    # - unlock_lock,<entity>
+    # - shade_set,<entity>,<pos>
+    # - climate_set_hvac_mode,<entity>,cool
+    # - climate_set_single,<entity>,24
+
+    case cmd
+    when 'socket_on'
+      entity = args[0]
+      service_call('switch', 'turn_on', entity)
+    when 'socket_off'
+      entity = args[0]
+      service_call('switch', 'turn_off', entity)
+    when 'switch_on'
+      entity = args[0]
+      service_call('switch', 'turn_on', entity)
+    when 'switch_off'
+      entity = args[0]
+      service_call('switch', 'turn_off', entity)
+    when 'dimmer_on'
+      entity = args[0]
+      service_call('light', 'turn_on', entity)
+    when 'dimmer_off'
+      entity = args[0]
+      service_call('light', 'turn_off', entity)
+    when 'dimmer_set'
+      entity = args[0]
+      pct = (args[1] || '0').to_f
+      # HA expects brightness_pct 0..100
+      service_call('light', 'turn_on', entity, { brightness_pct: pct })
+    when 'shade_set'
+      entity = args[0]
+      pos = (args[1] || '0').to_i
+      service_call('cover', 'set_cover_position', entity, { position: pos })
+    when 'lock_lock'
+      entity = args[0]
+      service_call('lock', 'lock', entity)
+    when 'unlock_lock'
+      entity = args[0]
+      service_call('lock', 'unlock', entity)
+    when 'climate_set_hvac_mode'
+      entity = args[0]
+      mode = (args[1] || 'off').to_s
+      service_call('climate', 'set_hvac_mode', entity, { hvac_mode: mode })
+    when 'climate_set_single'
+      entity = args[0]
+      temp = (args[1] || '0').to_f
+      service_call('climate', 'set_temperature', entity, { temperature: temp })
+    when 'climate_set_low'
+      entity = args[0]
+      low = (args[1] || '0').to_f
+      high = (args[2] || '0').to_f
+      service_call('climate', 'set_temperature', entity, { target_temp_low: low, target_temp_high: high })
+    when 'climate_set_high'
+      entity = args[0]
+      high = (args[1] || '0').to_f
+      service_call('climate', 'set_temperature', entity, { temperature: high })
+    else
+      log(:debug, :unhandled_action, cmd, args)
+    end
+  end
+
+  private
+
+  def service_call(domain, service, entity, service_data = nil)
+    return if entity.to_s.strip.empty?
+
+    log(:info, :ha_service_call, domain, service, entity, service_data || {})
+    @ha.call_service(domain: domain, service: service, entity_id: entity, service_data: service_data)
+  end
+
+  def request_state_refresh(entity_ids)
+    # subscribe_entities usually sends an initial snapshot, but when HA is under load
+    # or during reconnect, Savant UI can stay stale. Force a get_states once.
+    # NOTE: HA WebSocket get_states returns all entities; we filter in proxy.
+
+    @ha.send(:send_json, { type: 'get_states' })
+  rescue StandardError
+    # ignore
+  end
+
+  def handle_ha_event(msg)
+    ev = msg['event'] || {}
+    # For subscribe_entities, payload includes:
+    # - "a" full snapshot
+    # - "c" changes with "+" patches
+    data = ev['a'] || {}
+    changes = ev['c'] || {}
+
+    # snapshot
+    data.each do |entity_id, packed|
+      forward_entity(entity_id, packed)
+    end
+
+    # changes
+    changes.each do |entity_id, diff|
+      if diff.is_a?(Hash) && diff['+'].is_a?(Hash)
+        packed = diff['+']
+        forward_entity(entity_id, packed)
+      end
+    end
+  rescue StandardError => e
+    log(:error, :ha_event_error, e.class.name, e.message)
+  end
+
+  def forward_entity(entity_id, packed)
+    # packed keys:
+    # - 's' => state
+    # - 'a' => attributes hash
+    # We forward per-client filters.
+
+    state = packed['s']
+    attrs = packed['a'] || {}
+
+    @clients.each_value do |client|
+      next unless client.subscribed_to?(entity_id)
+
+      client.filter.each do |k|
+        case k
+        when 'state'
+          client.send_update(entity_id, 'state', state) unless state.nil?
+        when 'attributes'
+          client.send_update(entity_id, 'attributes', JSON.generate(attrs))
+        else
+          # attributes like brightness, temperature, current_temperature, preset_mode, current_position...
+          v = attrs[k]
+          # normalize numbers
+          v = v.to_f if v.is_a?(Numeric)
+          client.send_update(entity_id, k, v) unless v.nil?
+        end
+      end
+
+      # HVAC UI often needs hvac_mode even if the filter only asked for 'state'.
+      # Some integrations expose hvac_mode inside attributes; we mirror it to state key when present.
+      if entity_id.start_with?('climate.')
+        hvac_mode = attrs['hvac_mode']
+        hvac_action = attrs['hvac_action']
+        client.send_update(entity_id, 'hvac_mode', hvac_mode) if hvac_mode
+        client.send_update(entity_id, 'hvac_action', hvac_action) if hvac_action
+      end
+    end
+  end
+end
+
+# -------------------------
+# Boot
+# -------------------------
+
+token = ENV['SUPERVISOR_TOKEN'] || ENV['HASS_TOKEN'] || ''
+if token.to_s.strip.empty?
+  warn 'Missing SUPERVISOR_TOKEN/HASS_TOKEN env var'
+end
+
+address = ENV['HASS_WS'] || HaWs::DEFAULT_WS
+port = (ENV['SAVANT_TCP_PORT'] || '8080').to_i
+bind = ENV['SAVANT_BIND'] || '0.0.0.0'
+
+EM.run do
+  proxy = HassProxy.new(token: token, address: address)
+  proxy.start
+
+  EM.start_server(bind, port, SavantConn, proxy)
+  log(:info, :server_started, port)
+end
