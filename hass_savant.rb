@@ -122,7 +122,7 @@ class HaWs
       log(:error, :ws_send_error, e.class.name, e.message)
     end
 
-    if @ws_ready && @ws
+    if (@ws_ready || payload["type"] == "auth") && @ws
       op.call
     else
       @send_queue << op
