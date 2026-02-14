@@ -122,7 +122,12 @@ class HaWs
       log(:error, :ws_send_error, e.class.name, e.message)
     end
 
-    if (@ws_ready || payload["type"] == "auth") && @ws
+    # NOTE: payload keys are usually symbols in our codepaths (type: 'auth'),
+    # but some call sites may use string keys. Treat both.
+    ptype = payload.is_a?(Hash) ? (payload[:type] || payload['type']) : nil
+
+    # Allow auth to be sent before ws_ready (otherwise we deadlock and HA closes).
+    if (@ws_ready || ptype == 'auth') && @ws
       op.call
     else
       @send_queue << op
