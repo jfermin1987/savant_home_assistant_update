@@ -56,6 +56,10 @@ class HaWs
 
     @subscribed_entities = {} # entity_id => true
 
+    # Track in-flight get_states requests so we can recognize the large
+    # (all-entities) response and safely route it.
+    @pending_get_states = {}
+
     @on_event = nil
     @on_ready = nil
   end
@@ -79,6 +83,9 @@ class HaWs
       # ignore
     end
     @ws = nil
+
+    # Clear in-flight bookkeeping on stop/restart
+    @pending_get_states.clear
   end
 
   def ready? = @ws_ready
@@ -237,7 +244,7 @@ when 'result'
   if msg['success']
     # If this was a get_states snapshot we requested, convert the array of states
     # into our compact packed format and hand to the proxy as a synthetic event.
-    if @pending_get_states.delete(msg['id']) && msg['result'].is_a?(Array)
+	    if @pending_get_states && @pending_get_states.delete(msg['id']) && msg['result'].is_a?(Array)
       states = {}
       msg['result'].each do |st|
         eid = st['entity_id']
