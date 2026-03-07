@@ -394,13 +394,7 @@ class SavantConn < EM::Connection
   end
 
   def send_update(entity_id, key, value)
-    line = "#{entity_id}_#{key}===#{value}"
-    # Always emit an INFO line for HVAC traffic so we can prove exactly what the proxy
-    # is sending to Savant (Remote/App). This does not affect protocol behavior.
-    if entity_id.to_s.start_with?('climate.')
-      log(:info, :to_savant, current_identity, entity_id, key, value, :filter, @filter, :subs_all, @subscribe_all)
-    end
-    send_data("#{line}\n")
+    send_data("#{entity_id}_#{key}===#{value}\n")
   rescue StandardError => e
     log(:error, :savant_send_error, e.class.name, e.message)
   end
@@ -470,11 +464,9 @@ class SavantConn < EM::Connection
       @filter = args.join(',').split(',').map(&:strip).reject(&:empty?)
       @filter = ['state'] if @filter.empty?
       @proxy.save_filter(current_identity, @filter)
-      log(:info, :filter_set, current_identity, @filter)
     when 'subscribe_all_events'
       @subscribe_all = (args.first.to_s.strip.upcase == 'YES')
       @proxy.save_subs(current_identity, subscribe_all: @subscribe_all)
-      log(:info, :subscribe_all_events, current_identity, @subscribe_all)
     when 'subscribe_entity'
       ids = args.join(',').split(',').map(&:strip).reject(&:empty?)
       if ids.empty?
@@ -487,7 +479,6 @@ class SavantConn < EM::Connection
       ids.each { |e| @subs[e] = true }
       @proxy.save_subs(current_identity, add: ids)
       @proxy.on_client_subscribe(current_identity, ids)
-      log(:info, :subscribe_entity, current_identity, ids)
     else
       @proxy.handle_action(cmd, args)
     end
@@ -675,13 +666,7 @@ def ensure_ha_subscribed(entity_ids)
     client = @clients[identity]
     return unless client
 
-    wanted = if only
-      Array(only).compact.map(&:to_s)
-    else
-      prof[:subs].keys
-    end
-
-    wanted.each do |entity_id|
+    prof[:subs].keys.each do |entity_id|
       packed = @entity_cache[entity_id]
       next unless packed
       forward_entity_to_client(client, entity_id, packed, prof[:filter])
@@ -739,10 +724,7 @@ def ensure_ha_subscribed(entity_ids)
     @entity_cache[entity_id] = packed
 
     @clients.each_value do |client|
-      unless client.subscribed_to?(entity_id)
-        log(:debug, :skip_not_subscribed, client.current_identity, entity_id)
-        next
-      end
+      next unless client.subscribed_to?(entity_id)
 
       # use the *profile* filter if we have it (so we can restore by signature accurately)
       identity = client.respond_to?(:identity) ? client.identity : client.client_key
@@ -771,27 +753,10 @@ def ensure_ha_subscribed(entity_ids)
 
     # HVAC UI helpers (some XMLs bind to these explicitly)
     if entity_id.start_with?('climate.')
-      # HA climate integrations are inconsistent:
-      # - Some expose hvac_mode as an attribute
-      # - Others encode the mode in the entity "state" (cool/off/heat/auto)
-      # Remote UI typically needs hvac_mode + setpoint + current_temperature.
-
       hvac_mode = attrs['hvac_mode']
-      hvac_mode ||= state # normalize: use state when attribute missing
-
       hvac_action = attrs['hvac_action']
-
-      # Normalize setpoint/current temp keys (different integrations use different names)
-      temperature = attrs['temperature'] || attrs['target_temperature'] || attrs['target_temp'] ||
-                    attrs['target_temp_high'] || attrs['target_temp_low']
-      current_temperature = attrs['current_temperature'] || attrs['current_temp']
-
       client.send_update(entity_id, 'hvac_mode', hvac_mode) if hvac_mode
       client.send_update(entity_id, 'hvac_action', hvac_action) if hvac_action
-      client.send_update(entity_id, 'temperature', temperature) unless temperature.nil?
-      client.send_update(entity_id, 'current_temperature', current_temperature) unless current_temperature.nil?
-      # Also publish raw "state" for profiles that bind to it.
-      client.send_update(entity_id, 'state', state) unless state.nil?
     end
   end
 end
