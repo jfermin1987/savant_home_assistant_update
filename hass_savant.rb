@@ -631,6 +631,12 @@ def ensure_ha_subscribed(entity_ids)
       entity = args[0]
       pos = (args[1] || '0').to_i
       service_call('cover', 'set_cover_position', entity, { position: pos })
+    when 'shade_up', 'shade_open'
+      service_call('cover', 'open_cover', args[0])
+    when 'shade_down', 'shade_close'
+      service_call('cover', 'close_cover', args[0])
+    when 'shade_stop'
+      service_call('cover', 'stop_cover', args[0])
 
     when 'lock_lock'   then service_call('lock', 'lock',   args[0])
     when 'unlock_lock' then service_call('lock', 'unlock', args[0])
