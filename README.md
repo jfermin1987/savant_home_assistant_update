@@ -73,3 +73,129 @@ You can override these in the add-on container environment if needed:
 - `HA_RECONNECT_MAX` seconds (default: `30`)
 - `WS_QUEUE_MAX` (default: `200`)
 
+-  --- /mnt/data/hass_savant(1).xml	2026-05-29 01:58:52.729988639 +0000
++++ hass_savant.xml	2026-05-29 02:00:11.927292681 +0000
+@@ -9,6 +9,7 @@
+            rpm_xml_version="4.0">
+ 
+   <notes>
++    4.1 : Added simple Shade entity for open/close/stop covers without position support.
+     4.0 : Adding Buttons to the lighting control part, changed switch loads to the switch domain
+   </notes>
+ 
+@@ -379,6 +380,62 @@
+         </command_interface>
+       </action>
+ 
++      <action name="ShadeUp">
++        <action_argument name="Address1" note="Entity ID"/>
++        <action_argument name="Address2" note="not used"/>
++        <action_argument name="Address3" note="not used"/>
++        <action_argument name="Address4" note="not used"/>
++        <action_argument name="Address5" note="not used"/>
++        <action_argument name="Address6" note="not used"/>
++        <update_state_variable name="IsShadeOpen_*" update_type="set" update_source="constant" wildcard_format="%s" wildcard_source="action_argument" wildcard_source_name="Address1">true</update_state_variable>
++        <command_interface interface="ip">
++          <command response_required="no">
++            <parameter_list>
++              <parameter parameter_data_type="character">shade_up,</parameter>
++              <parameter parameter_data_type="character" action_argument="Address1"/>
++            </parameter_list>
++            <delay ms_delay="10"></delay>
++          </command>
++        </command_interface>
++      </action>
++
++      <action name="ShadeDown">
++        <action_argument name="Address1" note="Entity ID"/>
++        <action_argument name="Address2" note="not used"/>
++        <action_argument name="Address3" note="not used"/>
++        <action_argument name="Address4" note="not used"/>
++        <action_argument name="Address5" note="not used"/>
++        <action_argument name="Address6" note="not used"/>
++        <update_state_variable name="IsShadeOpen_*" update_type="set" update_source="constant" wildcard_format="%s" wildcard_source="action_argument" wildcard_source_name="Address1">false</update_state_variable>
++        <command_interface interface="ip">
++          <command response_required="no">
++            <parameter_list>
++              <parameter parameter_data_type="character">shade_down,</parameter>
++              <parameter parameter_data_type="character" action_argument="Address1"/>
++            </parameter_list>
++            <delay ms_delay="10"></delay>
++          </command>
++        </command_interface>
++      </action>
++
++      <action name="ShadeStop">
++        <action_argument name="Address1" note="Entity ID"/>
++        <action_argument name="Address2" note="not used"/>
++        <action_argument name="Address3" note="not used"/>
++        <action_argument name="Address4" note="not used"/>
++        <action_argument name="Address5" note="not used"/>
++        <action_argument name="Address6" note="not used"/>
++        <command_interface interface="ip">
++          <command response_required="no">
++            <parameter_list>
++              <parameter parameter_data_type="character">shade_stop,</parameter>
++              <parameter parameter_data_type="character" action_argument="Address1"/>
++            </parameter_list>
++            <delay ms_delay="10"></delay>
++          </command>
++        </command_interface>
++      </action>
++
+       <entity name="Single Motor Variable Shade" address_components="1">
+         <slider_representation>
+           <release_action name="ShadeSet" />
+@@ -402,6 +459,35 @@
+           <toggleOnUsingState name="IsShadeOpen">
+             <unique_identifier name="href" address_component="1" format="%s" />
+           </toggleOnUsingState>
++        </toggle_button_representation>
++        <query_status_with_action name="TrackEntity" period_ms="60000">
++          <with_arg name="Address1" address_component="1" format="%s" />
++        </query_status_with_action>
++      </entity>
++
++      <entity name="Shade" address_components="1">
++        <group_representation>
++          <push_button_representation>
++            <release_action name="ShadeUp"></release_action>
++            <osd_press_action name="ShadeUp"></osd_press_action>
++          </push_button_representation>
++          <push_button_representation>
++            <release_action name="ShadeDown"></release_action>
++            <osd_press_action name="ShadeDown"></osd_press_action>
++          </push_button_representation>
++          <push_button_representation>
++            <release_action name="ShadeStop"></release_action>
++            <osd_press_action name="ShadeStop"></osd_press_action>
++          </push_button_representation>
++        </group_representation>
++        <toggle_button_representation>
++          <release_action name="ShadeUp"></release_action>
++          <toggle_release_action name="ShadeDown"></toggle_release_action>
++          <osd_press_action name="ShadeUp"></osd_press_action>
++          <osd_hold_action name="ShadeDown"></osd_hold_action>
++          <toggleOnUsingState name="IsShadeOpen">
++            <unique_identifier name="href" address_component="1" format="%s" />
++          </toggleOnUsingState>
+         </toggle_button_representation>
+         <query_status_with_action name="TrackEntity" period_ms="60000">
+           <with_arg name="Address1" address_component="1" format="%s" />
+--- orig_hass_savant.rb	2026-05-29 02:00:19.379803658 +0000
++++ hass_savant.rb	2026-05-29 02:00:11.928195794 +0000
+@@ -631,6 +631,12 @@
+       entity = args[0]
+       pos = (args[1] || '0').to_i
+       service_call('cover', 'set_cover_position', entity, { position: pos })
++    when 'shade_up', 'shade_open'
++      service_call('cover', 'open_cover', args[0])
++    when 'shade_down', 'shade_close'
++      service_call('cover', 'close_cover', args[0])
++    when 'shade_stop'
++      service_call('cover', 'stop_cover', args[0])
+ 
+     when 'lock_lock'   then service_call('lock', 'lock',   args[0])
+     when 'unlock_lock' then service_call('lock', 'unlock', args[0])
+
+
