@@ -1,0 +1,303 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:noNamespaceSchemaLocation="racepoint_component_profile.xsd"
+           manufacturer="Hass"
+           model="Android TV"
+           alias="Home Assistant Android TV Remote, Google TV via Home Assistant"
+           device_class="HD_monitor"
+           unique_identifier="savant_id"
+           minimum_component_engine_version="0"
+           rpm_xml_version="1.0">
+
+  <notes>
+    1.0 : Android TV / Google TV control through Home Assistant Android TV Remote.
+          Savant sends TCP commands to the HA bridge on port 8080. The bridge calls
+          remote.send_command, remote.turn_on/off, and optional Wake-on-LAN.
+
+          Required Home Assistant entities:
+          - RemoteEntity: remote.habitacion_principal
+          - MediaPlayerEntity: media_player.habitacion_principal_2 (optional feedback/future use)
+
+          For power-on from deep standby, connect the TV by Ethernet and enable Network Standby,
+          Wake on LAN, Quick Start / Fast TV Start, and network remote control options when available.
+  </notes>
+
+  <component_properties>
+    <always_repeat_input_selection>true</always_repeat_input_selection>
+  </component_properties>
+
+  <control_interfaces preferred="ip">
+    <ip name_on_component="HOME ASSISTANT BRIDGE" port="8080" response_time_length_ms="500" protocol="tcp">
+      <send_postfix type="hex">0A</send_postfix>
+      <receive_end_condition test_condition="data" type="hex">0A</receive_end_condition>
+    </ip>
+  </control_interfaces>
+
+  <media_interfaces>
+    <input name_on_component="HDMI 1">
+      <combined_media>
+        <audio_media type="hdmi_audio"/>
+        <video_media type="hdmi"/>
+      </combined_media>
+      <resource resource_type="AV_AMPLIFIER_FUNCTION"/>
+      <resource resource_type="AV_MONITOR_SINK"/>
+      <resource resource_type="AV_STEREOSPEAKERS_SINK"/>
+      <resource resource_type="AV_VOLUMECONTROL_FUNCTION"/>
+    </input>
+    <input name_on_component="HDMI 2">
+      <combined_media>
+        <audio_media type="hdmi_audio"/>
+        <video_media type="hdmi"/>
+      </combined_media>
+      <resource resource_type="AV_AMPLIFIER_FUNCTION"/>
+      <resource resource_type="AV_MONITOR_SINK"/>
+      <resource resource_type="AV_STEREOSPEAKERS_SINK"/>
+      <resource resource_type="AV_VOLUMECONTROL_FUNCTION"/>
+    </input>
+    <input name_on_component="HDMI 3">
+      <combined_media>
+        <audio_media type="hdmi_audio"/>
+        <video_media type="hdmi"/>
+      </combined_media>
+      <resource resource_type="AV_AMPLIFIER_FUNCTION"/>
+      <resource resource_type="AV_MONITOR_SINK"/>
+      <resource resource_type="AV_STEREOSPEAKERS_SINK"/>
+      <resource resource_type="AV_VOLUMECONTROL_FUNCTION"/>
+    </input>
+    <input name_on_component="HDMI 4">
+      <combined_media>
+        <audio_media type="hdmi_audio"/>
+        <video_media type="hdmi"/>
+      </combined_media>
+      <resource resource_type="AV_AMPLIFIER_FUNCTION"/>
+      <resource resource_type="AV_MONITOR_SINK"/>
+      <resource resource_type="AV_STEREOSPEAKERS_SINK"/>
+      <resource resource_type="AV_VOLUMECONTROL_FUNCTION"/>
+    </input>
+    <data name_on_component="Ethernet">
+      <combined_media>
+        <data_media type="ethernet"/>
+        <control port="8080"/>
+      </combined_media>
+    </data>
+    <internal name_on_component="Apps">
+      <audio_media/>
+      <video_media/>
+      <resource resource_type="AV_EXTERNALMEDIASERVER_SOURCE"/>
+      <resource resource_type="AV_AMPLIFIER_FUNCTION"/>
+      <resource resource_type="AV_MONITOR_SINK"/>
+      <resource resource_type="AV_STEREOSPEAKERS_SINK"/>
+      <resource resource_type="AV_VOLUMECONTROL_FUNCTION"/>
+    </internal>
+  </media_interfaces>
+
+  <state_variable_list>
+    <state_variable name="RemoteEntity" owning_logical_component="HD Monitor" state_center_type="string" user_editable="yes" note="Home Assistant remote entity">remote.habitacion_principal</state_variable>
+    <state_variable name="MediaPlayerEntity" owning_logical_component="HD Monitor" state_center_type="string" user_editable="yes" note="Optional Home Assistant media_player entity for feedback">media_player.habitacion_principal_2</state_variable>
+    <state_variable name="WOLMac" owning_logical_component="HD Monitor" state_center_type="string" user_editable="yes" note="Optional Ethernet MAC for Wake-on-LAN"></state_variable>
+    <state_variable name="state_filter" owning_logical_component="HD Monitor" state_center_type="string" state_center_binding="state_filter" user_editable="yes">state,volume_level,is_volume_muted,app_id,app_name,current_activity</state_variable>
+
+    <state_variable name="Power_current_power_HD Monitor" state_center_binding="CurrentPowerStatus" state_center_type="string" owning_logical_component="HD Monitor">OFF</state_variable>
+    <state_variable name="Mute_current_mute_HD Monitor" state_center_binding="CurrentMuteStatus" state_center_type="string" owning_logical_component="HD Monitor">OFF</state_variable>
+    <volume_state_variable name="Volume_current_volume_HD Monitor" state_center_binding="CurrentVolume" state_center_type="integer" owning_logical_component="HD Monitor" granularity="1" min_value="0" max_value="100">0</volume_state_variable>
+    <state_variable name="CurrentAppName" owning_logical_component="HD Monitor" state_center_type="string" state_center_binding="CurrentAppName"></state_variable>
+    <state_variable name="CurrentAppID" owning_logical_component="HD Monitor" state_center_type="string" state_center_binding="CurrentAppID"></state_variable>
+  </state_variable_list>
+
+  <logical_component logical_component_name="HD Monitor">
+    <implementation>
+      <input name_on_component="HDMI 1"></input>
+    </implementation>
+    <implementation>
+      <input name_on_component="HDMI 2"></input>
+    </implementation>
+    <implementation>
+      <input name_on_component="HDMI 3"></input>
+    </implementation>
+    <implementation>
+      <input name_on_component="HDMI 4"></input>
+    </implementation>
+    <implementation>
+      <internal name_on_component="Apps">
+        <action_to_select name="Home"></action_to_select>
+      </internal>
+    </implementation>
+
+    <status_messages>
+      <status_message name="TVState">
+        <data type="character" terminator="_state===" terminator_type="character">
+          <update state="EntityID" type="string"/>
+        </data>
+        <data type="character" terminator_type="end_of_data">
+          <update state="CurrentState" type="string"/>
+          <data_map match_required="no">
+            <map key="on">
+              <update state="Power_current_power_HD Monitor" type="string">ON</update>
+            </map>
+            <map key="off">
+              <update state="Power_current_power_HD Monitor" type="string">OFF</update>
+            </map>
+            <map key="unavailable">
+              <update state="Power_current_power_HD Monitor" type="string">OFF</update>
+            </map>
+          </data_map>
+        </data>
+        <append_data_to_state_names state="EntityID"/>
+      </status_message>
+
+      <status_message name="TVMuted">
+        <data type="character" terminator="_is_volume_muted===" terminator_type="character">
+          <update state="EntityID" type="string"/>
+        </data>
+        <data type="character" terminator_type="end_of_data">
+          <data_map match_required="no">
+            <map key="true">
+              <update state="Mute_current_mute_HD Monitor" type="string">ON</update>
+            </map>
+            <map key="false">
+              <update state="Mute_current_mute_HD Monitor" type="string">OFF</update>
+            </map>
+          </data_map>
+        </data>
+        <append_data_to_state_names state="EntityID"/>
+      </status_message>
+
+      <status_message name="TVAppName">
+        <data type="character" terminator="_app_name===" terminator_type="character">
+          <update state="EntityID" type="string"/>
+        </data>
+        <data type="character" terminator_type="end_of_data">
+          <update state="CurrentAppName" type="string"/>
+        </data>
+        <append_data_to_state_names state="EntityID"/>
+      </status_message>
+
+      <status_message name="TVAppID">
+        <data type="character" terminator="_app_id===" terminator_type="character">
+          <update state="EntityID" type="string"/>
+        </data>
+        <data type="character" terminator_type="end_of_data">
+          <update state="CurrentAppID" type="string"/>
+        </data>
+        <append_data_to_state_names state="EntityID"/>
+      </status_message>
+    </status_messages>
+
+    <universal_component_actions>
+      <action name="PowerOn">
+        <execute_on_state_variable_condition name="Power_current_power_HD Monitor" test_condition="not_equal">ON</execute_on_state_variable_condition>
+        <update_state_variable name="Power_current_power_HD Monitor" update_type="set" update_source="constant">ON</update_state_variable>
+        <command_interface interface="ip">
+          <command response_required="no">
+            <parameter_list>
+              <parameter parameter_data_type="character">wol,</parameter>
+              <parameter parameter_data_type="character" state_variable="WOLMac"/>
+            </parameter_list>
+            <delay ms_delay="500"/>
+          </command>
+          <command response_required="no">
+            <parameter_list>
+              <parameter parameter_data_type="character">tv_power_on,</parameter>
+              <parameter parameter_data_type="character" state_variable="RemoteEntity"/>
+            </parameter_list>
+            <delay ms_delay="5000"/>
+          </command>
+        </command_interface>
+      </action>
+
+      <action name="PowerOff">
+        <execute_on_state_variable_condition name="Power_current_power_HD Monitor" test_condition="not_equal">OFF</execute_on_state_variable_condition>
+        <update_state_variable name="Power_current_power_HD Monitor" update_type="set" update_source="constant">OFF</update_state_variable>
+        <command_interface interface="ip">
+          <command response_required="no">
+            <parameter_list>
+              <parameter parameter_data_type="character">tv_power_off,</parameter>
+              <parameter parameter_data_type="character" state_variable="RemoteEntity"/>
+            </parameter_list>
+            <delay ms_delay="3000"/>
+          </command>
+        </command_interface>
+      </action>
+
+      <action name="PowerToggle">
+        <command_interface interface="ip">
+          <command response_required="no">
+            <parameter_list>
+              <parameter parameter_data_type="character">tv_power_toggle,</parameter>
+              <parameter parameter_data_type="character" state_variable="RemoteEntity"/>
+            </parameter_list>
+            <delay ms_delay="5000"/>
+          </command>
+        </command_interface>
+      </action>
+    </universal_component_actions>
+
+    <resource_component_actions resource_type="AV_EXTERNALMEDIASERVER_SOURCE">
+      <action name="Home"><command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_key,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,HOME</parameter></parameter_list><delay ms_delay="200"/></command></command_interface></action>
+      <action name="Exit"><command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_key,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,BACK</parameter></parameter_list><delay ms_delay="200"/></command></command_interface></action>
+      <action name="Menu"><command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_key,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,MENU</parameter></parameter_list><delay ms_delay="200"/></command></command_interface></action>
+      <action name="OSDCursorUp"><command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_key,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,DPAD_UP</parameter></parameter_list><delay ms_delay="200"/></command></command_interface></action>
+      <action name="OSDCursorDown"><command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_key,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,DPAD_DOWN</parameter></parameter_list><delay ms_delay="200"/></command></command_interface></action>
+      <action name="OSDCursorLeft"><command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_key,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,DPAD_LEFT</parameter></parameter_list><delay ms_delay="200"/></command></command_interface></action>
+      <action name="OSDCursorRight"><command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_key,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,DPAD_RIGHT</parameter></parameter_list><delay ms_delay="200"/></command></command_interface></action>
+      <action name="Select"><command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_key,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,DPAD_CENTER</parameter></parameter_list><delay ms_delay="200"/></command></command_interface></action>
+      <action name="Play"><command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_key,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,MEDIA_PLAY</parameter></parameter_list><delay ms_delay="200"/></command></command_interface></action>
+      <action name="Pause"><command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_key,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,MEDIA_PAUSE</parameter></parameter_list><delay ms_delay="200"/></command></command_interface></action>
+      <action name="Stop"><command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_key,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,MEDIA_STOP</parameter></parameter_list><delay ms_delay="200"/></command></command_interface></action>
+      <action name="PlayPause"><command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_key,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,MEDIA_PLAY_PAUSE</parameter></parameter_list><delay ms_delay="200"/></command></command_interface></action>
+      <action name="Netflix"><command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_launch_app,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,com.netflix.ninja</parameter></parameter_list><delay ms_delay="1000"/></command></command_interface></action>
+      <action name="YouTube"><command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_launch_app,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,com.google.android.youtube.tv</parameter></parameter_list><delay ms_delay="1000"/></command></command_interface></action>
+    </resource_component_actions>
+
+    <resource_component_actions resource_type="AV_VOLUMECONTROL_FUNCTION">
+      <action name="IncreaseVolume">
+        <update_volume_variables name="Volume_current_volume_HD Monitor" update_type="increment" update_source="constant">1</update_volume_variables>
+        <command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_key,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,VOLUME_UP</parameter></parameter_list><delay ms_delay="200"/></command></command_interface>
+      </action>
+      <action name="DecreaseVolume">
+        <update_volume_variables name="Volume_current_volume_HD Monitor" update_type="decrement" update_source="constant">1</update_volume_variables>
+        <command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_key,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,VOLUME_DOWN</parameter></parameter_list><delay ms_delay="200"/></command></command_interface>
+      </action>
+      <action name="MuteOn">
+        <update_state_variable name="Mute_current_mute_HD Monitor" update_type="set" update_source="constant">ON</update_state_variable>
+        <command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_key,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,VOLUME_MUTE</parameter></parameter_list><delay ms_delay="200"/></command></command_interface>
+      </action>
+      <action name="MuteOff">
+        <update_state_variable name="Mute_current_mute_HD Monitor" update_type="set" update_source="constant">OFF</update_state_variable>
+        <command_interface interface="ip"><command response_required="no"><parameter_list><parameter parameter_data_type="character">tv_key,</parameter><parameter parameter_data_type="character" state_variable="RemoteEntity"/><parameter parameter_data_type="character">,VOLUME_MUTE</parameter></parameter_list><delay ms_delay="200"/></command></command_interface>
+      </action>
+    </resource_component_actions>
+
+    <custom_component_actions>
+      <action name="AwaitConnection">
+        <execute_on_schedule period_ms="15000"/>
+        <execute_action_after_delay ms_delay="2000" action_name="StateFilter" action_type="CUSTOM"/>
+        <execute_action_after_delay ms_delay="3000" action_name="SubscribeTVEntities" action_type="CUSTOM"/>
+      </action>
+      <action name="StateFilter">
+        <command_interface interface="ip">
+          <command response_required="no">
+            <command_string type="character">state_filter,</command_string>
+            <parameter_list>
+              <parameter parameter_data_type="character" state_variable="state_filter"/>
+            </parameter_list>
+          </command>
+        </command_interface>
+      </action>
+      <action name="SubscribeTVEntities">
+        <command_interface interface="ip">
+          <command response_required="no">
+            <parameter_list>
+              <parameter parameter_data_type="character">subscribe_entity,</parameter>
+              <parameter parameter_data_type="character" state_variable="RemoteEntity"/>
+              <parameter parameter_data_type="character">,</parameter>
+              <parameter parameter_data_type="character" state_variable="MediaPlayerEntity"/>
+            </parameter_list>
+            <delay ms_delay="50"/>
+          </command>
+        </command_interface>
+      </action>
+    </custom_component_actions>
+
+  </logical_component>
+</component>
