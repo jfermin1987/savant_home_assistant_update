@@ -20,6 +20,9 @@
 
           For power-on from deep standby, connect the TV by Ethernet and enable Network Standby,
           Wake on LAN, Quick Start / Fast TV Start, and network remote control options when available.
+
+          Audio routing: this profile exposes AUDIO OUT (OPTICAL) so Savant can route TV audio
+          to an external amplifier such as SIPA50SM instead of the TV speakers.
   </notes>
 
   <component_properties>
@@ -74,6 +77,9 @@
       <resource resource_type="AV_STEREOSPEAKERS_SINK"/>
       <resource resource_type="AV_VOLUMECONTROL_FUNCTION"/>
     </input>
+    <output name_on_component="AUDIO OUT (OPTICAL)">
+      <audio_media type="optical_digital"/>
+    </output>
     <data name_on_component="Ethernet">
       <combined_media>
         <data_media type="ethernet"/>
@@ -107,17 +113,22 @@
   <logical_component logical_component_name="HD Monitor">
     <implementation>
       <input name_on_component="HDMI 1"></input>
+      <output name_on_component="AUDIO OUT (OPTICAL)"></output>
     </implementation>
     <implementation>
       <input name_on_component="HDMI 2"></input>
+      <output name_on_component="AUDIO OUT (OPTICAL)"></output>
     </implementation>
     <implementation>
       <input name_on_component="HDMI 3"></input>
+      <output name_on_component="AUDIO OUT (OPTICAL)"></output>
     </implementation>
     <implementation>
       <input name_on_component="HDMI 4"></input>
+      <output name_on_component="AUDIO OUT (OPTICAL)"></output>
     </implementation>
     <implementation>
+      <output name_on_component="AUDIO OUT (OPTICAL)"></output>
       <internal name_on_component="Apps">
         <action_to_select name="Home"></action_to_select>
       </internal>
