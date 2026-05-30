@@ -1,0 +1,76 @@
+--- /mnt/data/shadepatch/hass_savant.rb	2026-05-29 02:00:11.000000000 +0000
++++ /mnt/data/work_tv/hass_savant_tv.rb	2026-05-29 11:31:19.818990858 +0000
+@@ -638,6 +638,44 @@
+     when 'shade_stop'
+       service_call('cover', 'stop_cover', args[0])
+ 
++    when 'tv_key'
++      entity = args[0]
++      command = args[1].to_s.strip
++      if command.empty?
++        log(:warn, :tv_key_missing_command, entity)
++      else
++        service_call('remote', 'send_command', entity, { command: command })
++      end
++
++    when 'tv_power_on'
++      # Preferred HA path for Android TV Remote. If the TV is in deep sleep and the
++      # remote entity is unavailable, use WOL first or fall back to tv_key POWER.
++      service_call('remote', 'turn_on', args[0])
++
++    when 'tv_power_off'
++      service_call('remote', 'turn_off', args[0])
++
++    when 'tv_power_toggle'
++      service_call('remote', 'send_command', args[0], { command: 'POWER' })
++
++    when 'tv_launch_app'
++      entity = args[0]
++      activity = args[1].to_s.strip
++      if activity.empty?
++        log(:warn, :tv_launch_app_missing_activity, entity)
++      else
++        service_call('remote', 'turn_on', entity, { activity: activity })
++      end
++
++    when 'media_player_turn_on'
++      service_call('media_player', 'turn_on', args[0])
++
++    when 'media_player_turn_off'
++      service_call('media_player', 'turn_off', args[0])
++
++    when 'wol'
++      send_wol(args[0])
++
+     when 'lock_lock'   then service_call('lock', 'lock',   args[0])
+     when 'unlock_lock' then service_call('lock', 'unlock', args[0])
+ 
+@@ -679,6 +717,28 @@
+     end
+   end
+ 
++  def send_wol(mac)
++    mac = mac.to_s.strip
++    return if mac.empty?
++
++    clean = mac.delete(':-').downcase
++    unless clean.match?(/\A[0-9a-f]{12}\z/)
++      log(:warn, :wol_invalid_mac, mac)
++      return
++    end
++
++    packet = [clean].pack('H*')
++    magic = (0xff.chr.b * 6) + (packet * 16)
++
++    UDPSocket.open do |sock|
++      sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_BROADCAST, true)
++      sock.send(magic, 0, '255.255.255.255', 9)
++    end
++    log(:info, :wol_sent, mac)
++  rescue StandardError => e
++    log(:error, :wol_error, mac, e.class.name, e.message)
++  end
++
+   def service_call(domain, service, entity, service_data = nil)
+     return if entity.to_s.strip.empty?
+ 
