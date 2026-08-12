@@ -518,17 +518,33 @@
     <!-- CUSTOM -->
     <custom_component_actions>
       <action name="TrackEntity">
-        <action_argument name="Address1" />
-        <update_state_variable name="HassEntityArray" update_type="append" update_source="action_argument">Address1</update_state_variable>
-        <update_state_variable name="HassEntityArray" update_type="append" update_source="constant">,</update_state_variable>
+        <action_argument name="Address1" note="Entity ID"/>
+        <!-- Each tracked entity now subscribes ITSELF directly. This replaces the
+             old "append to HassEntityArray, then clear it every 15s and bulk
+             subscribe" handshake, which raced against the 60s TrackEntity sweep
+             and produced empty "subscribe_entity," commands (stale UI on host
+             boot). Fires at connect (initial query) and every period_ms as a
+             keepalive; the proxy dedupes and replays cached state on subscribe. -->
+        <command_interface interface="ip">
+          <command response_required="no">
+            <parameter_list>
+              <parameter parameter_data_type="character">subscribe_entity,</parameter>
+              <parameter parameter_data_type="character" action_argument="Address1"/>
+            </parameter_list>
+            <delay ms_delay="10"/>
+          </command>
+        </command_interface>
       </action>
 
       <action name="AwaitConnection">
-        <update_state_variable name="HassEntityArray" update_type="set" update_source="constant"></update_state_variable>
+        <!-- Keepalive/handshake. No longer clears HassEntityArray and no longer
+             fires a bulk SubscribeEntities (entities self-subscribe via
+             TrackEntity now). This only re-asserts event subscription and the
+             state filter after a (re)connect, so there is no empty-subscribe
+             race. -->
         <execute_on_schedule period_ms="15000"/>
-        <execute_action_after_delay ms_delay="2000" action_name="SubscribeEvents" action_type="CUSTOM"></execute_action_after_delay>
-        <execute_action_after_delay ms_delay="3000" action_name="StateFilter" action_type="CUSTOM"></execute_action_after_delay>
-        <execute_action_after_delay ms_delay="5000" action_name="SubscribeEntities" action_type="CUSTOM"></execute_action_after_delay>
+        <execute_action_after_delay ms_delay="500" action_name="SubscribeEvents" action_type="CUSTOM"></execute_action_after_delay>
+        <execute_action_after_delay ms_delay="1000" action_name="StateFilter" action_type="CUSTOM"></execute_action_after_delay>
       </action>
 
       <action name="SubscribeEvents">
