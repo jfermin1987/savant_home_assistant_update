@@ -480,6 +480,16 @@ class SavantConn < EM::Connection
       @proxy.save_subs(current_identity, add: ids)
       @proxy.on_client_subscribe(current_identity, ids)
     else
+      # Safety net: opportunistically subscribe to the entity we're controlling
+      # so its state feedback flows even if the periodic subscribe handshake
+      # hasn't populated this profile yet (e.g. right after a host reboot, where
+      # Savant connects to the proxy faster than it delivers the entity list).
+      target = args[0].to_s.strip
+      if target.include?('.') && !@subs[target]
+        @subs[target] = true
+        @proxy.save_subs(current_identity, add: [target])
+        @proxy.on_client_subscribe(current_identity, [target])
+      end
       @proxy.handle_action(cmd, args)
     end
   end
