@@ -491,6 +491,14 @@ end
 class HassProxy
   REFRESH_COOLDOWN = 1.0 # seconds (avoid get_states spam)
 
+  # States that mean "the load is off" for feedback purposes. When an entity is
+  # in one of these, level-type attributes must be reported as 0 so dimmer/shade
+  # tiles in Savant actually collapse instead of keeping their last value.
+  OFF_STATES = %w[off unavailable unknown closed none].freeze
+
+  # Attributes that represent a level/position and should be zeroed on OFF.
+  LEVEL_KEYS = %w[brightness brightness_pct level value current_position position].freeze
+
   def initialize(token:, address: HaWs::DEFAULT_WS)
     @clients = {} # conn_id => conn
     @profiles = {}
@@ -770,32 +778,64 @@ def ensure_ha_subscribed(entity_ids)
 
   def handle_ha_event(msg)
     if msg['type'] == 'get_states' && msg['states'].is_a?(Hash)
-      msg['states'].each { |eid, packed| forward_entity(eid, packed) }
+      msg['states'].each { |eid, packed| apply_full_state(eid, packed) }
       return
     end
 
     ev = msg['event'] || {}
 
     # subscribe_entities events:
-    # - "a": full snapshot for subscribed entities
-    # - "c": delta patches
-    data = ev['a'] || {}
-    changes = ev['c'] || {}
+    # - "a": full snapshot for (newly) subscribed entities
+    # - "c": minimal delta patches ("+": added/changed fields, "-": removed)
+    # - "r": entities removed from the registry
+    (ev['a'] || {}).each { |entity_id, packed| apply_full_state(entity_id, packed) }
 
-    data.each { |entity_id, packed| forward_entity(entity_id, packed) }
+    (ev['c'] || {}).each do |entity_id, diff|
+      next unless diff.is_a?(Hash)
+      apply_delta(entity_id, diff)
+    end
 
-    changes.each do |entity_id, diff|
-      next unless diff.is_a?(Hash) && diff['+'].is_a?(Hash)
-      forward_entity(entity_id, diff['+'])
+    if ev['r'].is_a?(Array)
+      ev['r'].each { |entity_id| @entity_cache.delete(entity_id) }
     end
   rescue StandardError => e
     log(:error, :ha_event_error, e.class.name, e.message)
   end
 
-  def forward_entity(entity_id, packed)
-    # cache last known state so a newly-connected Savant profile can be primed immediately
-    @entity_cache[entity_id] = packed
+  # Store a FULL state snapshot and forward it.
+  def apply_full_state(entity_id, packed)
+    full = { 's' => packed['s'], 'a' => (packed['a'] || {}) }
+    @entity_cache[entity_id] = full
+    forward_entity(entity_id, full)
+  end
 
+  # Merge a compressed delta onto the cached full state, then forward the
+  # resulting full state.
+  #
+  # HA only sends the *changed* fields in "c" events, so we MUST merge into the
+  # previous snapshot. We also honor "-": when a light/cover turns off, HA
+  # removes brightness/position instead of setting them to 0, and those removals
+  # arrive here. Ignoring them was why dimmers stayed "on" in the Savant UI.
+  def apply_delta(entity_id, diff)
+    prev = @entity_cache[entity_id] || { 's' => nil, 'a' => {} }
+    merged = { 's' => prev['s'], 'a' => (prev['a'] || {}).dup }
+
+    plus = diff['+']
+    if plus.is_a?(Hash)
+      merged['s'] = plus['s'] if plus.key?('s')
+      merged['a'].merge!(plus['a']) if plus['a'].is_a?(Hash)
+    end
+
+    minus = diff['-']
+    if minus.is_a?(Hash) && minus['a']
+      Array(minus['a']).each { |k| merged['a'].delete(k) }
+    end
+
+    @entity_cache[entity_id] = merged
+    forward_entity(entity_id, merged)
+  end
+
+  def forward_entity(entity_id, packed)
     @clients.each_value do |client|
       next unless client.subscribed_to?(entity_id)
 
@@ -812,16 +852,46 @@ def ensure_ha_subscribed(entity_ids)
     state = packed['s']
     attrs = packed['a'] || {}
 
-    Array(filter).each do |k|
+    # A light/cover that is off (or unavailable) has had its brightness/position
+    # attributes REMOVED by HA, not zeroed. Normalize those to 0 here so any
+    # level-bound UI element in Savant actually drops instead of keeping its last
+    # value and looking like it's still on.
+    off_like = state.nil? || OFF_STATES.include?(state.to_s.downcase)
+
+    fkeys = Array(filter)
+
+    fkeys.each do |k|
       case k
       when 'state'
         client.send_update(entity_id, 'state', state) unless state.nil?
       when 'attributes'
         client.send_update(entity_id, 'attributes', JSON.generate(attrs))
+      when 'brightness'
+        v = off_like ? 0 : attrs['brightness']
+        client.send_update(entity_id, 'brightness', v) unless v.nil?
+      when 'brightness_pct'
+        # HA reports brightness on a 0-255 scale; the command path uses 0-100.
+        # Normalize feedback to 0-100 so the slider matches what we send.
+        v = if off_like
+              0
+            elsif attrs['brightness']
+              ((attrs['brightness'].to_f / 255.0) * 100).round
+            else
+              attrs['brightness_pct']
+            end
+        client.send_update(entity_id, 'brightness_pct', v) unless v.nil?
       else
         v = attrs[k]
+        v = 0 if v.nil? && off_like && LEVEL_KEYS.include?(k)
         client.send_update(entity_id, k, v) unless v.nil?
       end
+    end
+
+    # Safety net: even if a profile's state_filter didn't explicitly request a
+    # level key, make sure dimmer tiles collapse on OFF. Harmless if unbound.
+    if off_like && entity_id.start_with?('light.')
+      client.send_update(entity_id, 'brightness', 0)     unless fkeys.include?('brightness')
+      client.send_update(entity_id, 'brightness_pct', 0) unless fkeys.include?('brightness_pct')
     end
 
     # HVAC UI helpers (some XMLs bind to these explicitly)
