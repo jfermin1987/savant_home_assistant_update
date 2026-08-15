@@ -692,10 +692,12 @@ class SavantConn < EM::Connection
     log(:error, :savant_send_error, e.class.name, e.message)
   end
 
-  def send_catalog_mapping(id, value)
-    safe = value.to_s.gsub(/[
-]+/, ' ').strip
-    send_data("haid:#{id},entity:#{safe}
+  def send_catalog_mapping(id, entity_id)
+    # Mirror Ezlo's proven DeviceID map: store ONLY the raw HA entity_id.
+    # This keeps System State values directly valid for Home Assistant.
+    safe = entity_id.to_s.gsub(/[
+]+/, '').strip
+    send_data("haid:#{id},#{safe}
 ")
   rescue StandardError => e
     log(:error, :savant_catalog_send_error, e.class.name, e.message)
@@ -853,7 +855,19 @@ class HassProxy
   def start = @ha.start
 
   def resolve_entity(value)
-    @entity_ids.resolve(value)
+    raw = value.to_s.strip
+
+    # Backward-compatible cleanup for v6/v6.1 catalog strings, e.g.:
+    # entity:SWITCH | switch.bano_principal_1 | Luz Bano
+    raw = raw.sub(/\Aentity:/i, '').strip
+    if raw.include?('|')
+      candidate = raw.split('|').map(&:strip).find do |part|
+        part.match?(/\A(?:switch|light|climate|fan|lock|cover)\.[A-Za-z0-9_]+\z/)
+      end
+      return candidate if candidate
+    end
+
+    @entity_ids.resolve(raw)
   end
 
   def savant_id_for(entity_id)
@@ -1128,7 +1142,7 @@ def ensure_ha_subscribed(entity_ids)
       EM.add_timer(idx * gap) do
         clients.each do |client|
           next unless client.catalog_ready?
-          client.send_catalog_mapping(row[:id], row[:value])
+          client.send_catalog_mapping(row[:id], row[:entity_id])
         end
       end
     end
@@ -1366,5 +1380,5 @@ EM.run do
   # a fresh profile TCP session. Manual RefreshEntityCatalog remains available.
   log(:info, :server_started, port,
       { bind: bind, ha: address, log_level: LOG_LEVEL,
-        catalog_discovery: 'on_savant_connect_or_manual' })
+        catalog_discovery: 'on_savant_connect_or_manual', catalog_map_format: 'raw_entity_id' })
 end
