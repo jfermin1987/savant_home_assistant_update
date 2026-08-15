@@ -785,6 +785,9 @@ class SavantConn < EM::Connection
         @catalog_ready = true
         @proxy.on_client_ready(current_identity)
       end
+    when 'catalog_refresh'
+      log(:info, :manual_catalog_refresh_requested, current_identity)
+      @proxy.refresh_catalog(current_identity)
     when 'subscribe_all_events'
       @subscribe_all = (args.first.to_s.strip.upcase == 'YES')
       @proxy.save_subs(current_identity, subscribe_all: @subscribe_all)
@@ -844,7 +847,7 @@ class HassProxy
 
     @ha = HaWs.new(token: token, address: address)
     @ha.on_event { |msg| handle_ha_event(msg) }
-    @ha.on_ready { refresh_all_profiles }
+    @ha.on_ready { on_ha_ready }
   end
 
   def start = @ha.start
@@ -857,14 +860,15 @@ class HassProxy
     @entity_ids.id_for(entity_id)
   end
 
-  def refresh_catalog
-    request_state_refresh
+  def refresh_catalog(identity = nil)
+    request_discovery(identity, reason: :manual)
   end
 
   def on_client_ready(identity)
+    # First state_filter on a fresh Savant TCP session = host/profile online.
+    # Run one fresh HA inventory discovery here and nowhere periodically.
     log(:info, :catalog_client_ready, identity, :known_ids, @entity_ids.entries.length)
-    replay_catalog(identity)
-    request_state_refresh
+    request_discovery(identity, reason: :savant_connect)
   end
 
   def register_client(conn)
@@ -887,10 +891,9 @@ class HassProxy
 
     conn.bind_profile!(profile_id, restore: { filter: prof[:filter], subs: prof[:subs].keys })
 
-    # Prime normal UI state + force one refresh. Catalog replay waits until
-    # the profile emits state_filter (known-good receive path).
+    # Prime normal UI from local cache. The first state_filter on this fresh
+    # TCP session triggers the one-time discovery.
     replay_cached(profile_id)
-    request_state_refresh
   end
 
   def save_filter(identity, filter)
@@ -920,7 +923,6 @@ class HassProxy
         log(:info, :subs_restored_by_filter, sig, prof[:subs].length)
         @ha.ensure_subscribed(prof[:subs].keys)
         replay_cached(identity)
-        request_state_refresh
       end
     end
 
@@ -956,7 +958,6 @@ def save_subs(identity, add: nil, subscribe_all: nil)
     log(:info, :subs_restored, identity, prof[:subs].length)
     @ha.ensure_subscribed(prof[:subs].keys)
     replay_cached(identity)
-    request_state_refresh
     true
   end
 
@@ -969,8 +970,8 @@ def save_subs(identity, add: nil, subscribe_all: nil)
   end
 
 def ensure_ha_subscribed(entity_ids)
+    # subscribe_entities provides the initial snapshot for these entities.
     @ha.ensure_subscribed(entity_ids)
-    request_state_refresh
   end
 
   def handle_action(cmd, args)
@@ -1178,33 +1179,47 @@ def ensure_ha_subscribed(entity_ids)
     @ha.call_service(domain: domain, service: service, entity_id: entity, service_data: service_data)
   end
 
-  def request_state_refresh
+  def request_discovery(identity = nil, reason: :manual)
     now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    return if (now - @last_refresh_at) < REFRESH_COOLDOWN
+    if (now - @last_refresh_at) < REFRESH_COOLDOWN
+      log(:debug, :catalog_discovery_deduped, identity, reason)
+      return
+    end
 
     @last_refresh_at = now
-    log(:info, :catalog_get_states_requested)
+    @catalog_discovery_target = identity
+    @catalog_discovery_reason = reason
+    log(:info, :catalog_discovery_requested, :target, identity, :reason, reason)
     @ha.get_states
   rescue StandardError => e
-    log(:error, :catalog_get_states_request_error, e.class.name, e.message)
+    log(:error, :catalog_discovery_request_error, e.class.name, e.message)
   end
 
-  def refresh_all_profiles
-    # After HA reconnect, force a refresh so every Savant profile gets a snapshot.
-    request_state_refresh
+  def on_ha_ready
+    # HA reconnects restore subscriptions inside HaWs, but intentionally do not
+    # rebuild/rebroadcast the device catalog. Discovery belongs to Savant host
+    # startup/profile reconnect, or the manual RefreshEntityCatalog action.
+    log(:info, :ha_ready_no_discovery)
   end
 
   def handle_ha_event(msg)
     if msg['type'] == 'get_states' && msg['states'].is_a?(Hash)
+      target = @catalog_discovery_target
+      reason = @catalog_discovery_reason || :unknown
+      @catalog_discovery_target = nil
+      @catalog_discovery_reason = nil
+
       catalog_changed = @entity_ids.refresh(msg['states'])
       log(:info, :catalog_inventory_received,
+          :reason, reason,
           :ha_states, msg['states'].length,
           :catalog_ids, @entity_ids.entries.length,
           :changed, catalog_changed)
 
-      # A newly connected client receives the existing map in on_client_ready.
-      # Re-broadcast only when discovery actually changed the persistent map.
-      replay_catalog if catalog_changed
+      # Exactly one full catalog delivery for this discovery cycle.
+      replay_catalog(target)
+
+      # This same snapshot initializes subscribed Savant states after boot.
       msg['states'].each { |eid, packed| apply_full_state(eid, packed) }
       return
     end
@@ -1347,12 +1362,9 @@ EM.run do
 
   EM.start_server(bind, port, SavantConn, proxy)
 
-  refresh_s = (ENV['SAVANT_CATALOG_REFRESH_S'] || '120').to_i
-  if refresh_s > 0
-    EM.add_periodic_timer(refresh_s) { proxy.refresh_catalog }
-  end
-
+  # No periodic discovery. New inventory is requested once when Savant opens
+  # a fresh profile TCP session. Manual RefreshEntityCatalog remains available.
   log(:info, :server_started, port,
       { bind: bind, ha: address, log_level: LOG_LEVEL,
-        catalog_refresh_s: refresh_s })
+        catalog_discovery: 'on_savant_connect_or_manual' })
 end
