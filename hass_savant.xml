@@ -6,9 +6,10 @@
            alias="Home Assistant"
            device_class="Lighting_controller"
            minimum_component_engine_version="0"
-           rpm_xml_version="4.7">
+           rpm_xml_version="4.8">
 
   <notes>
+    4.8 : Ezlo-style RAW entity ID map in System State; removes decorated catalog values from TrackEntity paths.
     4.7 : Discovery only on fresh Savant host/profile connection; no periodic polling. Manual RefreshEntityCatalog action included.
     4.6 : Persistent numeric HA IDs + Ezlo-style System State entity registry (001-899).
           Address1 must use the numeric HA ID shown in HAEntityID_xxx.
@@ -1084,7 +1085,6 @@
         <data type="character" terminator_type="hex" terminator="2C">
           <update state="HAAddress" type="string"></update>
         </data>
-        <constant type="character">entity:</constant>
         <data type="character" terminator_type="end_of_data">
           <update state="HAEntityID" type="string"></update>
         </data>
