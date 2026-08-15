@@ -6,12 +6,18 @@
            alias="Home Assistant"
            device_class="Lighting_controller"
            minimum_component_engine_version="0"
-           rpm_xml_version="4.2">
+           rpm_xml_version="4.4">
 
   <notes>
+    4.4 : Automatic persistent numeric HA entity IDs + System State catalog for Savant data tables.
+    4.3 : Enable third-party service requests (diagnostic compatibility).
     4.2 : Switch scene compatibility: use CurrentDimmerLevel state for Switch entities and keep switch UI.
     4.0 : Adding Buttons to the lighting control part, changed switch loads to the switch domain
   </notes>
+
+  <component_properties>
+    <listen_for_third_party_service_requests>true</listen_for_third_party_service_requests>
+  </component_properties>
 
   <control_interfaces preferred="ip">
     <ip port="8080" response_time_length_ms="500" protocol="tcp">
@@ -44,6 +50,15 @@
     <state_variable name="state_filter" owning_logical_component="Home Assistant" state_center_type="string" state_center_binding="state_filter" user_editable="yes">brightness,state,cover,lock,current_position,switch</state_variable>
     <state_variable name="HassEntityArray" owning_logical_component="Home Assistant" state_center_type="string" state_center_binding="HassEntityArray"></state_variable>
     <state_variable name="CurrentDimmerLevel" owning_logical_component="Home Assistant" state_center_type="integer" state_center_binding="CurrentDimmerLevel">0</state_variable>
+
+    <!-- Automatic HA -> Savant numeric ID catalog -->
+    <state_variable name="EntityCatalogSummary" owning_logical_component="Home Assistant" state_center_type="string"></state_variable>
+    <state_variable name="LightingEntityMap" owning_logical_component="Home Assistant" state_center_type="string"></state_variable>
+    <state_variable name="HVACEntityMap" owning_logical_component="Home Assistant" state_center_type="string"></state_variable>
+    <state_variable name="FanEntityMap" owning_logical_component="Home Assistant" state_center_type="string"></state_variable>
+    <state_variable name="LockEntityMap" owning_logical_component="Home Assistant" state_center_type="string"></state_variable>
+    <state_variable name="GarageEntityMap" owning_logical_component="Home Assistant" state_center_type="string"></state_variable>
+    <state_variable name="ShadeEntityMap" owning_logical_component="Home Assistant" state_center_type="string"></state_variable>
 
     <state_variable name="FanSet_0" owning_logical_component="Home Assistant" state_center_type="string" user_editable="yes" note="Fan Speed Off">0</state_variable>
     <state_variable name="FanSet_1" owning_logical_component="Home Assistant" state_center_type="string" user_editable="yes" note="Fan Speed Low">2</state_variable>
@@ -164,6 +179,76 @@
           <update state="FriendlyName" type="string"/>
         </data>
         <append_data_to_state_names state="EntityID" />
+      </status_message>
+
+
+      <!-- Automatic HA entity catalog. Each state is dynamically suffixed with the
+           persistent numeric Savant ID: LightingEntityMap_001, HVACEntityMap_300, etc. -->
+      <status_message name="LightingEntityCatalog">
+        <data type="character" terminator="_lightingmap===" terminator_type="character">
+          <update state="CatalogID" type="string"/>
+        </data>
+        <data type="character" terminator_type="end_of_data">
+          <update state="LightingEntityMap" type="string"/>
+        </data>
+        <append_data_to_state_names state="CatalogID"/>
+      </status_message>
+
+      <status_message name="HVACEntityCatalog">
+        <data type="character" terminator="_hvacmap===" terminator_type="character">
+          <update state="CatalogID" type="string"/>
+        </data>
+        <data type="character" terminator_type="end_of_data">
+          <update state="HVACEntityMap" type="string"/>
+        </data>
+        <append_data_to_state_names state="CatalogID"/>
+      </status_message>
+
+      <status_message name="FanEntityCatalog">
+        <data type="character" terminator="_fanmap===" terminator_type="character">
+          <update state="CatalogID" type="string"/>
+        </data>
+        <data type="character" terminator_type="end_of_data">
+          <update state="FanEntityMap" type="string"/>
+        </data>
+        <append_data_to_state_names state="CatalogID"/>
+      </status_message>
+
+      <status_message name="LockEntityCatalog">
+        <data type="character" terminator="_lockmap===" terminator_type="character">
+          <update state="CatalogID" type="string"/>
+        </data>
+        <data type="character" terminator_type="end_of_data">
+          <update state="LockEntityMap" type="string"/>
+        </data>
+        <append_data_to_state_names state="CatalogID"/>
+      </status_message>
+
+      <status_message name="GarageEntityCatalog">
+        <data type="character" terminator="_garagemap===" terminator_type="character">
+          <update state="CatalogID" type="string"/>
+        </data>
+        <data type="character" terminator_type="end_of_data">
+          <update state="GarageEntityMap" type="string"/>
+        </data>
+        <append_data_to_state_names state="CatalogID"/>
+      </status_message>
+
+      <status_message name="ShadeEntityCatalog">
+        <data type="character" terminator="_shademap===" terminator_type="character">
+          <update state="CatalogID" type="string"/>
+        </data>
+        <data type="character" terminator_type="end_of_data">
+          <update state="ShadeEntityMap" type="string"/>
+        </data>
+        <append_data_to_state_names state="CatalogID"/>
+      </status_message>
+
+      <status_message name="EntityCatalogSummary">
+        <constant type="character">catalog_summary===</constant>
+        <data type="character" terminator_type="end_of_data">
+          <update state="EntityCatalogSummary" type="string"/>
+        </data>
       </status_message>
 
       <status_message name="Unhandled">
