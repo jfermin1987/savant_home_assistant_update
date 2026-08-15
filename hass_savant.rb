@@ -361,6 +361,10 @@ class SavantConn < EM::Connection
 
     @filter = ['state']
     @subs = {}
+    # Maps canonical HA entity_id -> the Address1 Savant used.
+    # Example: "switch.bano_principal_1" => "101"
+    # This lets HA feedback return using Savant's numeric Address1.
+    @savant_address_by_entity = {}
     @subscribe_all = false
     @bound = false
   end
@@ -394,7 +398,8 @@ class SavantConn < EM::Connection
   end
 
   def send_update(entity_id, key, value)
-    send_data("#{entity_id}_#{key}===#{value}\n")
+    savant_id = @savant_address_by_entity[entity_id.to_s] || entity_id
+    send_data("#{savant_id}_#{key}===#{value}\n")
   rescue StandardError => e
     log(:error, :savant_send_error, e.class.name, e.message)
   end
@@ -476,15 +481,24 @@ class SavantConn < EM::Connection
         return
       end
 
-      ids.each { |e| @subs[e] = true }
-      @proxy.save_subs(current_identity, add: ids)
-      @proxy.on_client_subscribe(current_identity, ids)
+      canonical_ids = ids.map do |requested_id|
+        canonical = @proxy.resolve_entity(requested_id)
+        @savant_address_by_entity[canonical] = requested_id if canonical != requested_id
+        canonical
+      end
+
+      canonical_ids.each { |e| @subs[e] = true }
+      @proxy.save_subs(current_identity, add: canonical_ids)
+      @proxy.on_client_subscribe(current_identity, canonical_ids)
     else
       # Safety net: opportunistically subscribe to the entity we're controlling
       # so its state feedback flows even if the periodic subscribe handshake
       # hasn't populated this profile yet (e.g. right after a host reboot, where
       # Savant connects to the proxy faster than it delivers the entity list).
-      target = args[0].to_s.strip
+      requested_target = args[0].to_s.strip
+      target = @proxy.resolve_entity(requested_target)
+      @savant_address_by_entity[target] = requested_target if target != requested_target
+
       if target.include?('.') && !@subs[target]
         @subs[target] = true
         @proxy.save_subs(current_identity, add: [target])
@@ -500,6 +514,17 @@ end
 # -------------------------
 class HassProxy
   REFRESH_COOLDOWN = 1.0 # seconds (avoid get_states spam)
+
+  # TEST 2 - Savant numeric Address1 -> Home Assistant entity_id.
+  # Keep this test intentionally limited to one load first.
+  ENTITY_ALIASES = {
+    '101' => 'switch.bano_principal_1'
+  }.freeze
+
+  def resolve_entity(value)
+    key = value.to_s.strip
+    ENTITY_ALIASES.fetch(key, key)
+  end
 
   # States that mean "the load is off" for feedback purposes. When an entity is
   # in one of these, level-type attributes must be reported as 0 so dimmer/shade
@@ -632,6 +657,9 @@ def ensure_ha_subscribed(entity_ids)
   end
 
   def handle_action(cmd, args)
+    args = Array(args).dup
+    args[0] = resolve_entity(args[0]) unless args.empty?
+
     case cmd
     when 'socket_on'  then service_call('switch', 'turn_on',  args[0])
     when 'socket_off' then service_call('switch', 'turn_off', args[0])
