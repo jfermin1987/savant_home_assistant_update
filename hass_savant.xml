@@ -6,9 +6,10 @@
            alias="Home Assistant"
            device_class="Lighting_controller"
            minimum_component_engine_version="0"
-           rpm_xml_version="4.6">
+           rpm_xml_version="4.7">
 
   <notes>
+    4.7 : Discovery only on fresh Savant host/profile connection; no periodic polling. Manual RefreshEntityCatalog action included.
     4.6 : Persistent numeric HA IDs + Ezlo-style System State entity registry (001-899).
           Address1 must use the numeric HA ID shown in HAEntityID_xxx.
     4.2 : Switch scene compatibility: use CurrentDimmerLevel state for Switch entities and keep switch UI.
@@ -1448,6 +1449,14 @@
 
     <!-- CUSTOM -->
     <custom_component_actions>
+      <action name="RefreshEntityCatalog">
+        <command_interface interface="ip">
+          <command response_required="no">
+            <command_string type="character">catalog_refresh</command_string>
+          </command>
+        </command_interface>
+      </action>
+
       <action name="TrackEntity">
         <action_argument name="Address1" note="Entity ID"/>
         <!-- Each tracked entity now subscribes ITSELF directly. This replaces the
