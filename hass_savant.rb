@@ -16,6 +16,8 @@ require 'faye/websocket'
 require 'securerandom'
 require 'socket'
 require 'thread'
+require 'fileutils'
+require 'time'
 
 # -------------------------
 # Logging
@@ -30,6 +32,208 @@ def log(level, *args)
 
   $stdout.sync = true
   p([level.to_sym, *args])
+end
+
+
+# -------------------------
+# Persistent Savant numeric-ID registry
+# -------------------------
+class EntityIdRegistry
+  # 3-digit address space, grouped by Savant subsystem.
+  # IDs are NEVER renumbered automatically once assigned.
+  RANGES = {
+    'lighting' => (1..299),
+    'hvac'     => (300..399),
+    'fan'      => (400..499),
+    'lock'     => (500..599),
+    'garage'   => (600..699),
+    'shade'    => (700..899)
+  }.freeze
+
+  SUFFIX = {
+    'lighting' => 'lightingmap',
+    'hvac'     => 'hvacmap',
+    'fan'      => 'fanmap',
+    'lock'     => 'lockmap',
+    'garage'   => 'garagemap',
+    'shade'    => 'shademap'
+  }.freeze
+
+  attr_reader :path
+
+  def initialize(path:)
+    @path = path
+    @entries = {}       # entity_id => metadata
+    @id_to_entity = {}  # "001" => entity_id
+    load!
+  end
+
+  def resolve(value)
+    key = normalize_id(value)
+    return @id_to_entity[key] if key && @id_to_entity[key]
+
+    value.to_s.strip
+  end
+
+  def id_for(entity_id)
+    e = @entries[entity_id.to_s]
+    e && format('%03d', e['id'].to_i)
+  end
+
+  def entries
+    @entries.values.sort_by { |e| e['id'].to_i }
+  end
+
+  def refresh(states)
+    changed = false
+    now = Time.now.utc.iso8601 rescue Time.now.to_s
+
+    candidates = states.map do |entity_id, packed|
+      attrs = packed.is_a?(Hash) ? (packed['a'] || {}) : {}
+      category = classify(entity_id, attrs)
+      next unless category
+
+      {
+        'entity_id' => entity_id.to_s,
+        'category' => category,
+        'friendly_name' => (attrs['friendly_name'] || entity_id).to_s,
+        'device_class' => attrs['device_class'].to_s,
+        'last_seen' => now
+      }
+    end.compact
+
+    # Deterministic first-time assignment: category range, then entity_id.
+    candidates.sort_by { |c| [RANGES.keys.index(c['category']) || 999, c['entity_id']] }.each do |c|
+      eid = c['entity_id']
+      existing = @entries[eid]
+
+      if existing
+        %w[category friendly_name device_class last_seen].each do |k|
+          if existing[k] != c[k]
+            existing[k] = c[k]
+            changed = true unless k == 'last_seen'
+          end
+        end
+        next
+      end
+
+      id = next_free_id(c['category'])
+      unless id
+        log(:error, :entity_id_range_full, c['category'], eid)
+        next
+      end
+
+      @entries[eid] = c.merge('id' => id)
+      @id_to_entity[format('%03d', id)] = eid
+      changed = true
+      log(:info, :entity_id_assigned, format('%03d', id), c['category'], eid)
+    end
+
+    rebuild_reverse!
+    save! if changed
+    changed
+  end
+
+  def catalog_rows
+    entries.map do |e|
+      id = format('%03d', e['id'].to_i)
+      {
+        id: id,
+        category: e['category'],
+        suffix: SUFFIX.fetch(e['category']),
+        entity_id: e['entity_id'],
+        friendly_name: e['friendly_name'],
+        device_class: e['device_class'],
+        value: catalog_value(e)
+      }
+    end
+  end
+
+  def counts
+    h = Hash.new(0)
+    entries.each { |e| h[e['category']] += 1 }
+    h
+  end
+
+  private
+
+  def normalize_id(value)
+    s = value.to_s.strip
+    return nil unless s.match?(/\A\d{1,3}\z/)
+
+    format('%03d', s.to_i)
+  end
+
+  def classify(entity_id, attrs)
+    domain = entity_id.to_s.split('.', 2).first
+    case domain
+    when 'light', 'switch'
+      'lighting'
+    when 'climate'
+      'hvac'
+    when 'fan'
+      'fan'
+    when 'lock'
+      'lock'
+    when 'cover'
+      dc = attrs['device_class'].to_s.downcase
+      %w[garage gate].include?(dc) ? 'garage' : 'shade'
+    else
+      nil
+    end
+  end
+
+  def next_free_id(category)
+    range = RANGES.fetch(category)
+    used = @entries.values.map { |e| e['id'].to_i }.to_h { |id| [id, true] }
+    range.find { |id| !used[id] }
+  end
+
+  def catalog_value(e)
+    parts = [e['entity_id'], e['friendly_name']]
+    parts << e['device_class'] unless e['device_class'].to_s.empty?
+    parts.join(' | ')
+  end
+
+  def rebuild_reverse!
+    @id_to_entity = {}
+    @entries.each do |eid, e|
+      id = e['id'].to_i
+      next if id <= 0
+      @id_to_entity[format('%03d', id)] = eid
+    end
+  end
+
+  def load!
+    return unless File.file?(@path)
+
+    raw = JSON.parse(File.read(@path))
+    data = raw['entities'].is_a?(Hash) ? raw['entities'] : {}
+    @entries = data
+    rebuild_reverse!
+    log(:info, :entity_id_registry_loaded, @entries.length, @path)
+  rescue StandardError => e
+    log(:error, :entity_id_registry_load_error, @path, e.class.name, e.message)
+    @entries = {}
+    @id_to_entity = {}
+  end
+
+  def save!
+    dir = File.dirname(@path)
+    FileUtils.mkdir_p(dir) unless Dir.exist?(dir)
+
+    payload = {
+      'version' => 1,
+      'updated_at' => Time.now.utc.to_s,
+      'entities' => @entries
+    }
+    tmp = "#{@path}.tmp"
+    File.write(tmp, JSON.pretty_generate(payload))
+    File.rename(tmp, @path)
+    log(:info, :entity_id_registry_saved, @entries.length, @path)
+  rescue StandardError => e
+    log(:error, :entity_id_registry_save_error, @path, e.class.name, e.message)
+  end
 end
 
 # -------------------------
@@ -361,10 +565,6 @@ class SavantConn < EM::Connection
 
     @filter = ['state']
     @subs = {}
-    # Maps canonical HA entity_id -> the Address1 Savant used.
-    # Example: "switch.bano_principal_1" => "101"
-    # This lets HA feedback return using Savant's numeric Address1.
-    @savant_address_by_entity = {}
     @subscribe_all = false
     @bound = false
   end
@@ -398,10 +598,22 @@ class SavantConn < EM::Connection
   end
 
   def send_update(entity_id, key, value)
-    savant_id = @savant_address_by_entity[entity_id.to_s] || entity_id
+    savant_id = @proxy.savant_id_for(entity_id) || entity_id
     send_data("#{savant_id}_#{key}===#{value}\n")
   rescue StandardError => e
     log(:error, :savant_send_error, e.class.name, e.message)
+  end
+
+  def send_catalog_entry(id, suffix, value)
+    send_data("#{id}_#{suffix}===#{value}\n")
+  rescue StandardError => e
+    log(:error, :savant_catalog_send_error, e.class.name, e.message)
+  end
+
+  def send_catalog_summary(value)
+    send_data("catalog_summary===#{value}\n")
+  rescue StandardError => e
+    log(:error, :savant_catalog_send_error, e.class.name, e.message)
   end
 
   def subscribed_to?(entity_id)
@@ -476,17 +688,11 @@ class SavantConn < EM::Connection
       ids = args.join(',').split(',').map(&:strip).reject(&:empty?)
       if ids.empty?
         # Savant sometimes reconnects and sends an empty subscribe_entity.
-        # In that case, restore the last known subscription set for this profile/filter.
         @proxy.restore_subs_if_empty(current_identity)
         return
       end
 
-      canonical_ids = ids.map do |requested_id|
-        canonical = @proxy.resolve_entity(requested_id)
-        @savant_address_by_entity[canonical] = requested_id if canonical != requested_id
-        canonical
-      end
-
+      canonical_ids = ids.map { |requested| @proxy.resolve_entity(requested) }
       canonical_ids.each { |e| @subs[e] = true }
       @proxy.save_subs(current_identity, add: canonical_ids)
       @proxy.on_client_subscribe(current_identity, canonical_ids)
@@ -495,10 +701,7 @@ class SavantConn < EM::Connection
       # so its state feedback flows even if the periodic subscribe handshake
       # hasn't populated this profile yet (e.g. right after a host reboot, where
       # Savant connects to the proxy faster than it delivers the entity list).
-      requested_target = args[0].to_s.strip
-      target = @proxy.resolve_entity(requested_target)
-      @savant_address_by_entity[target] = requested_target if target != requested_target
-
+      target = @proxy.resolve_entity(args[0])
       if target.include?('.') && !@subs[target]
         @subs[target] = true
         @proxy.save_subs(current_identity, add: [target])
@@ -515,17 +718,6 @@ end
 class HassProxy
   REFRESH_COOLDOWN = 1.0 # seconds (avoid get_states spam)
 
-  # TEST 2 - Savant numeric Address1 -> Home Assistant entity_id.
-  # Keep this test intentionally limited to one load first.
-  ENTITY_ALIASES = {
-    '101' => 'switch.bano_principal_1'
-  }.freeze
-
-  def resolve_entity(value)
-    key = value.to_s.strip
-    ENTITY_ALIASES.fetch(key, key)
-  end
-
   # States that mean "the load is off" for feedback purposes. When an entity is
   # in one of these, level-type attributes must be reported as 0 so dimmer/shade
   # tiles in Savant actually collapse instead of keeping their last value.
@@ -535,6 +727,9 @@ class HassProxy
   LEVEL_KEYS = %w[brightness brightness_pct level value current_position position].freeze
 
   def initialize(token:, address: HaWs::DEFAULT_WS)
+    registry_path = ENV['SAVANT_ENTITY_MAP_FILE'] || '/data/savant_entity_ids.json'
+    @entity_ids = EntityIdRegistry.new(path: registry_path)
+
     @clients = {} # conn_id => conn
     @profiles = {}
     @last_filter_value = {} # identity/profile_id => {filter:[], subs:{}, subscribe_all:bool}
@@ -550,6 +745,14 @@ class HassProxy
   end
 
   def start = @ha.start
+
+  def resolve_entity(value)
+    @entity_ids.resolve(value)
+  end
+
+  def savant_id_for(entity_id)
+    @entity_ids.id_for(entity_id)
+  end
 
   def register_client(conn)
     @clients[conn.identity] = conn
@@ -571,7 +774,8 @@ class HassProxy
 
     conn.bind_profile!(profile_id, restore: { filter: prof[:filter], subs: prof[:subs].keys })
 
-    # Prime UI immediately from cache + force one refresh
+    # Prime UI immediately from cache/catalog + force one refresh
+    replay_catalog(profile_id)
     replay_cached(profile_id)
     request_state_refresh
   end
@@ -680,6 +884,23 @@ def ensure_ha_subscribed(entity_ids)
         service_call('light', 'turn_on', entity, { brightness_pct: pct })
       end
 
+    when 'fan_set'
+      entity = args[0]
+      raw = (args[1] || '0').to_f
+      if raw <= 0
+        service_call('fan', 'turn_off', entity)
+      else
+        pct = if raw <= 3
+                { 1 => 33, 2 => 66, 3 => 100 }.fetch(raw.to_i, 100)
+              elsif raw <= 7
+                # Existing Savant XML commonly maps fan levels to 2/4/7.
+                raw <= 2 ? 33 : (raw <= 4 ? 66 : 100)
+              else
+                [[raw, 1].max, 100].min.round
+              end
+        service_call('fan', 'set_percentage', entity, { percentage: pct })
+      end
+
     when 'shade_set'
       entity = args[0]
       pos = (args[1] || '0').to_i
@@ -690,6 +911,15 @@ def ensure_ha_subscribed(entity_ids)
       service_call('cover', 'close_cover', args[0])
     when 'shade_stop'
       service_call('cover', 'stop_cover', args[0])
+
+    when 'open_garage_door'
+      service_call('cover', 'open_cover', args[0])
+    when 'close_garage_door'
+      service_call('cover', 'close_cover', args[0])
+    when 'toggle_garage_door'
+      entity = args[0]
+      current = @entity_cache.dig(entity, 's').to_s.downcase
+      service_call('cover', current == 'open' ? 'close_cover' : 'open_cover', entity)
 
     when 'tv_key'
       entity = args[0]
@@ -751,6 +981,26 @@ def ensure_ha_subscribed(entity_ids)
       service_call('climate', 'set_temperature', entity, { temperature: high })
     else
       log(:debug, :unhandled_action, cmd, args)
+    end
+  end
+
+  def replay_catalog(identity = nil)
+    clients = if identity
+                c = @clients[identity]
+                c ? [c] : []
+              else
+                @clients.values
+              end
+
+    rows = @entity_ids.catalog_rows
+    counts = @entity_ids.counts
+    summary = %w[lighting hvac fan lock garage shade].map { |k| "#{k}=#{counts[k] || 0}" }.join(' | ')
+
+    clients.each do |client|
+      client.send_catalog_summary(summary)
+      rows.each do |row|
+        client.send_catalog_entry(row[:id], row[:suffix], row[:value])
+      end
     end
   end
 
@@ -816,6 +1066,8 @@ def ensure_ha_subscribed(entity_ids)
 
   def handle_ha_event(msg)
     if msg['type'] == 'get_states' && msg['states'].is_a?(Hash)
+      catalog_changed = @entity_ids.refresh(msg['states'])
+      replay_catalog if catalog_changed
       msg['states'].each { |eid, packed| apply_full_state(eid, packed) }
       return
     end
