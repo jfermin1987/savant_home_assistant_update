@@ -6,11 +6,11 @@
            alias="Home Assistant"
            device_class="Lighting_controller"
            minimum_component_engine_version="0"
-           rpm_xml_version="4.4">
+           rpm_xml_version="4.6">
 
   <notes>
-    4.4 : Automatic persistent numeric HA entity IDs + System State catalog for Savant data tables.
-    4.3 : Enable third-party service requests (diagnostic compatibility).
+    4.6 : Persistent numeric HA IDs + Ezlo-style System State entity registry (001-899).
+          Address1 must use the numeric HA ID shown in HAEntityID_xxx.
     4.2 : Switch scene compatibility: use CurrentDimmerLevel state for Switch entities and keep switch UI.
     4.0 : Adding Buttons to the lighting control part, changed switch loads to the switch domain
   </notes>
@@ -51,14 +51,907 @@
     <state_variable name="HassEntityArray" owning_logical_component="Home Assistant" state_center_type="string" state_center_binding="HassEntityArray"></state_variable>
     <state_variable name="CurrentDimmerLevel" owning_logical_component="Home Assistant" state_center_type="integer" state_center_binding="CurrentDimmerLevel">0</state_variable>
 
-    <!-- Automatic HA -> Savant numeric ID catalog -->
-    <state_variable name="EntityCatalogSummary" owning_logical_component="Home Assistant" state_center_type="string"></state_variable>
-    <state_variable name="LightingEntityMap" owning_logical_component="Home Assistant" state_center_type="string"></state_variable>
-    <state_variable name="HVACEntityMap" owning_logical_component="Home Assistant" state_center_type="string"></state_variable>
-    <state_variable name="FanEntityMap" owning_logical_component="Home Assistant" state_center_type="string"></state_variable>
-    <state_variable name="LockEntityMap" owning_logical_component="Home Assistant" state_center_type="string"></state_variable>
-    <state_variable name="GarageEntityMap" owning_logical_component="Home Assistant" state_center_type="string"></state_variable>
-    <state_variable name="ShadeEntityMap" owning_logical_component="Home Assistant" state_center_type="string"></state_variable>
+    <!-- Ezlo-style predeclared persistent HA ID registry. -->
+    <state_variable name="HAEntityCatalogSummary" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityCatalogSummary" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_001" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_001" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_002" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_002" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_003" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_003" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_004" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_004" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_005" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_005" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_006" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_006" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_007" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_007" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_008" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_008" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_009" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_009" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_010" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_010" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_011" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_011" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_012" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_012" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_013" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_013" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_014" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_014" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_015" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_015" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_016" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_016" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_017" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_017" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_018" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_018" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_019" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_019" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_020" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_020" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_021" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_021" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_022" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_022" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_023" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_023" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_024" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_024" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_025" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_025" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_026" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_026" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_027" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_027" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_028" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_028" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_029" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_029" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_030" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_030" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_031" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_031" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_032" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_032" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_033" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_033" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_034" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_034" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_035" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_035" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_036" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_036" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_037" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_037" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_038" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_038" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_039" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_039" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_040" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_040" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_041" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_041" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_042" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_042" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_043" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_043" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_044" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_044" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_045" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_045" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_046" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_046" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_047" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_047" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_048" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_048" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_049" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_049" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_050" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_050" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_051" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_051" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_052" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_052" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_053" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_053" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_054" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_054" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_055" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_055" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_056" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_056" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_057" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_057" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_058" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_058" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_059" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_059" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_060" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_060" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_061" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_061" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_062" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_062" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_063" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_063" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_064" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_064" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_065" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_065" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_066" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_066" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_067" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_067" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_068" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_068" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_069" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_069" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_070" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_070" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_071" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_071" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_072" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_072" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_073" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_073" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_074" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_074" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_075" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_075" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_076" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_076" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_077" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_077" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_078" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_078" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_079" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_079" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_080" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_080" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_081" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_081" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_082" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_082" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_083" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_083" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_084" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_084" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_085" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_085" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_086" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_086" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_087" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_087" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_088" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_088" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_089" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_089" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_090" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_090" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_091" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_091" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_092" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_092" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_093" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_093" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_094" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_094" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_095" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_095" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_096" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_096" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_097" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_097" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_098" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_098" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_099" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_099" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_100" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_100" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_101" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_101" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_102" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_102" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_103" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_103" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_104" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_104" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_105" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_105" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_106" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_106" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_107" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_107" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_108" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_108" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_109" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_109" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_110" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_110" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_111" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_111" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_112" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_112" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_113" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_113" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_114" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_114" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_115" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_115" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_116" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_116" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_117" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_117" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_118" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_118" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_119" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_119" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_120" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_120" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_121" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_121" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_122" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_122" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_123" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_123" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_124" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_124" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_125" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_125" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_126" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_126" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_127" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_127" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_128" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_128" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_129" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_129" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_130" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_130" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_131" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_131" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_132" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_132" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_133" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_133" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_134" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_134" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_135" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_135" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_136" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_136" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_137" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_137" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_138" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_138" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_139" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_139" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_140" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_140" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_141" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_141" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_142" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_142" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_143" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_143" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_144" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_144" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_145" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_145" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_146" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_146" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_147" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_147" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_148" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_148" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_149" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_149" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_150" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_150" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_151" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_151" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_152" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_152" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_153" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_153" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_154" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_154" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_155" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_155" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_156" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_156" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_157" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_157" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_158" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_158" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_159" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_159" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_160" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_160" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_161" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_161" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_162" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_162" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_163" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_163" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_164" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_164" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_165" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_165" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_166" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_166" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_167" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_167" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_168" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_168" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_169" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_169" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_170" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_170" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_171" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_171" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_172" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_172" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_173" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_173" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_174" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_174" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_175" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_175" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_176" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_176" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_177" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_177" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_178" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_178" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_179" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_179" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_180" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_180" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_181" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_181" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_182" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_182" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_183" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_183" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_184" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_184" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_185" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_185" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_186" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_186" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_187" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_187" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_188" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_188" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_189" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_189" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_190" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_190" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_191" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_191" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_192" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_192" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_193" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_193" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_194" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_194" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_195" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_195" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_196" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_196" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_197" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_197" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_198" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_198" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_199" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_199" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_200" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_200" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_201" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_201" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_202" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_202" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_203" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_203" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_204" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_204" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_205" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_205" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_206" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_206" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_207" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_207" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_208" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_208" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_209" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_209" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_210" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_210" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_211" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_211" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_212" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_212" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_213" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_213" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_214" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_214" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_215" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_215" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_216" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_216" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_217" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_217" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_218" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_218" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_219" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_219" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_220" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_220" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_221" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_221" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_222" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_222" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_223" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_223" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_224" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_224" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_225" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_225" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_226" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_226" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_227" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_227" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_228" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_228" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_229" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_229" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_230" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_230" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_231" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_231" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_232" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_232" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_233" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_233" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_234" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_234" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_235" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_235" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_236" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_236" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_237" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_237" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_238" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_238" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_239" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_239" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_240" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_240" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_241" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_241" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_242" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_242" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_243" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_243" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_244" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_244" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_245" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_245" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_246" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_246" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_247" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_247" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_248" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_248" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_249" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_249" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_250" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_250" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_251" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_251" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_252" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_252" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_253" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_253" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_254" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_254" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_255" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_255" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_256" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_256" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_257" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_257" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_258" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_258" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_259" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_259" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_260" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_260" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_261" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_261" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_262" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_262" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_263" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_263" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_264" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_264" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_265" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_265" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_266" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_266" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_267" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_267" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_268" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_268" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_269" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_269" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_270" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_270" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_271" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_271" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_272" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_272" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_273" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_273" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_274" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_274" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_275" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_275" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_276" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_276" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_277" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_277" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_278" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_278" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_279" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_279" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_280" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_280" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_281" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_281" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_282" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_282" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_283" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_283" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_284" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_284" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_285" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_285" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_286" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_286" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_287" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_287" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_288" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_288" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_289" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_289" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_290" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_290" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_291" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_291" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_292" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_292" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_293" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_293" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_294" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_294" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_295" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_295" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_296" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_296" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_297" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_297" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_298" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_298" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_299" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_299" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_300" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_300" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_301" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_301" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_302" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_302" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_303" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_303" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_304" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_304" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_305" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_305" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_306" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_306" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_307" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_307" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_308" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_308" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_309" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_309" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_310" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_310" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_311" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_311" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_312" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_312" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_313" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_313" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_314" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_314" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_315" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_315" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_316" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_316" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_317" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_317" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_318" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_318" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_319" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_319" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_320" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_320" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_321" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_321" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_322" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_322" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_323" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_323" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_324" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_324" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_325" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_325" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_326" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_326" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_327" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_327" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_328" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_328" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_329" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_329" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_330" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_330" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_331" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_331" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_332" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_332" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_333" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_333" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_334" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_334" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_335" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_335" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_336" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_336" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_337" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_337" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_338" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_338" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_339" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_339" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_340" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_340" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_341" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_341" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_342" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_342" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_343" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_343" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_344" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_344" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_345" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_345" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_346" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_346" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_347" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_347" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_348" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_348" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_349" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_349" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_350" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_350" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_351" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_351" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_352" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_352" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_353" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_353" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_354" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_354" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_355" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_355" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_356" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_356" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_357" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_357" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_358" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_358" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_359" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_359" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_360" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_360" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_361" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_361" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_362" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_362" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_363" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_363" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_364" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_364" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_365" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_365" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_366" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_366" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_367" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_367" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_368" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_368" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_369" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_369" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_370" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_370" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_371" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_371" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_372" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_372" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_373" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_373" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_374" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_374" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_375" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_375" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_376" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_376" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_377" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_377" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_378" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_378" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_379" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_379" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_380" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_380" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_381" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_381" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_382" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_382" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_383" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_383" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_384" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_384" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_385" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_385" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_386" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_386" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_387" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_387" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_388" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_388" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_389" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_389" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_390" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_390" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_391" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_391" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_392" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_392" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_393" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_393" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_394" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_394" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_395" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_395" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_396" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_396" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_397" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_397" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_398" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_398" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_399" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_399" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_400" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_400" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_401" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_401" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_402" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_402" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_403" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_403" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_404" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_404" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_405" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_405" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_406" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_406" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_407" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_407" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_408" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_408" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_409" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_409" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_410" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_410" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_411" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_411" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_412" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_412" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_413" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_413" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_414" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_414" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_415" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_415" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_416" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_416" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_417" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_417" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_418" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_418" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_419" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_419" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_420" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_420" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_421" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_421" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_422" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_422" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_423" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_423" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_424" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_424" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_425" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_425" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_426" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_426" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_427" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_427" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_428" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_428" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_429" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_429" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_430" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_430" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_431" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_431" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_432" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_432" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_433" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_433" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_434" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_434" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_435" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_435" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_436" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_436" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_437" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_437" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_438" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_438" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_439" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_439" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_440" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_440" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_441" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_441" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_442" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_442" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_443" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_443" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_444" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_444" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_445" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_445" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_446" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_446" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_447" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_447" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_448" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_448" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_449" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_449" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_450" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_450" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_451" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_451" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_452" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_452" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_453" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_453" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_454" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_454" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_455" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_455" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_456" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_456" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_457" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_457" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_458" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_458" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_459" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_459" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_460" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_460" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_461" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_461" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_462" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_462" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_463" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_463" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_464" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_464" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_465" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_465" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_466" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_466" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_467" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_467" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_468" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_468" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_469" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_469" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_470" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_470" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_471" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_471" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_472" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_472" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_473" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_473" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_474" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_474" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_475" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_475" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_476" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_476" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_477" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_477" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_478" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_478" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_479" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_479" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_480" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_480" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_481" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_481" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_482" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_482" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_483" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_483" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_484" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_484" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_485" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_485" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_486" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_486" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_487" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_487" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_488" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_488" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_489" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_489" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_490" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_490" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_491" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_491" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_492" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_492" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_493" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_493" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_494" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_494" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_495" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_495" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_496" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_496" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_497" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_497" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_498" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_498" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_499" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_499" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_500" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_500" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_501" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_501" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_502" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_502" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_503" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_503" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_504" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_504" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_505" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_505" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_506" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_506" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_507" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_507" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_508" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_508" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_509" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_509" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_510" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_510" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_511" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_511" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_512" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_512" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_513" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_513" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_514" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_514" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_515" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_515" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_516" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_516" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_517" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_517" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_518" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_518" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_519" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_519" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_520" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_520" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_521" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_521" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_522" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_522" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_523" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_523" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_524" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_524" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_525" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_525" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_526" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_526" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_527" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_527" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_528" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_528" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_529" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_529" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_530" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_530" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_531" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_531" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_532" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_532" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_533" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_533" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_534" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_534" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_535" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_535" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_536" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_536" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_537" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_537" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_538" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_538" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_539" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_539" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_540" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_540" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_541" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_541" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_542" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_542" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_543" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_543" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_544" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_544" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_545" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_545" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_546" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_546" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_547" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_547" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_548" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_548" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_549" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_549" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_550" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_550" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_551" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_551" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_552" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_552" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_553" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_553" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_554" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_554" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_555" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_555" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_556" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_556" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_557" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_557" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_558" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_558" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_559" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_559" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_560" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_560" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_561" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_561" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_562" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_562" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_563" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_563" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_564" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_564" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_565" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_565" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_566" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_566" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_567" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_567" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_568" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_568" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_569" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_569" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_570" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_570" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_571" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_571" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_572" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_572" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_573" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_573" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_574" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_574" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_575" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_575" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_576" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_576" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_577" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_577" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_578" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_578" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_579" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_579" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_580" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_580" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_581" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_581" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_582" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_582" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_583" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_583" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_584" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_584" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_585" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_585" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_586" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_586" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_587" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_587" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_588" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_588" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_589" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_589" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_590" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_590" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_591" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_591" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_592" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_592" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_593" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_593" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_594" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_594" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_595" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_595" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_596" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_596" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_597" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_597" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_598" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_598" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_599" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_599" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_600" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_600" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_601" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_601" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_602" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_602" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_603" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_603" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_604" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_604" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_605" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_605" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_606" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_606" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_607" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_607" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_608" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_608" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_609" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_609" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_610" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_610" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_611" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_611" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_612" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_612" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_613" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_613" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_614" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_614" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_615" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_615" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_616" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_616" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_617" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_617" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_618" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_618" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_619" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_619" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_620" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_620" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_621" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_621" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_622" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_622" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_623" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_623" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_624" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_624" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_625" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_625" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_626" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_626" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_627" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_627" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_628" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_628" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_629" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_629" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_630" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_630" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_631" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_631" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_632" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_632" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_633" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_633" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_634" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_634" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_635" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_635" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_636" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_636" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_637" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_637" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_638" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_638" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_639" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_639" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_640" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_640" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_641" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_641" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_642" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_642" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_643" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_643" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_644" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_644" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_645" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_645" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_646" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_646" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_647" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_647" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_648" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_648" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_649" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_649" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_650" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_650" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_651" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_651" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_652" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_652" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_653" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_653" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_654" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_654" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_655" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_655" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_656" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_656" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_657" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_657" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_658" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_658" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_659" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_659" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_660" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_660" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_661" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_661" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_662" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_662" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_663" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_663" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_664" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_664" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_665" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_665" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_666" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_666" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_667" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_667" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_668" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_668" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_669" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_669" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_670" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_670" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_671" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_671" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_672" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_672" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_673" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_673" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_674" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_674" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_675" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_675" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_676" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_676" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_677" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_677" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_678" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_678" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_679" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_679" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_680" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_680" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_681" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_681" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_682" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_682" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_683" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_683" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_684" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_684" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_685" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_685" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_686" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_686" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_687" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_687" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_688" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_688" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_689" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_689" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_690" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_690" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_691" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_691" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_692" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_692" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_693" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_693" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_694" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_694" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_695" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_695" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_696" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_696" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_697" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_697" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_698" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_698" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_699" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_699" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_700" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_700" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_701" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_701" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_702" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_702" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_703" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_703" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_704" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_704" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_705" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_705" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_706" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_706" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_707" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_707" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_708" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_708" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_709" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_709" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_710" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_710" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_711" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_711" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_712" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_712" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_713" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_713" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_714" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_714" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_715" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_715" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_716" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_716" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_717" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_717" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_718" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_718" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_719" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_719" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_720" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_720" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_721" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_721" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_722" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_722" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_723" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_723" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_724" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_724" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_725" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_725" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_726" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_726" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_727" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_727" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_728" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_728" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_729" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_729" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_730" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_730" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_731" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_731" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_732" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_732" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_733" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_733" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_734" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_734" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_735" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_735" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_736" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_736" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_737" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_737" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_738" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_738" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_739" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_739" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_740" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_740" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_741" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_741" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_742" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_742" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_743" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_743" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_744" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_744" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_745" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_745" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_746" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_746" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_747" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_747" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_748" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_748" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_749" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_749" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_750" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_750" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_751" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_751" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_752" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_752" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_753" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_753" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_754" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_754" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_755" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_755" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_756" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_756" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_757" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_757" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_758" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_758" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_759" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_759" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_760" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_760" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_761" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_761" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_762" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_762" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_763" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_763" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_764" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_764" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_765" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_765" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_766" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_766" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_767" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_767" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_768" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_768" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_769" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_769" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_770" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_770" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_771" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_771" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_772" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_772" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_773" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_773" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_774" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_774" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_775" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_775" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_776" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_776" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_777" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_777" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_778" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_778" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_779" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_779" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_780" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_780" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_781" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_781" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_782" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_782" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_783" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_783" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_784" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_784" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_785" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_785" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_786" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_786" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_787" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_787" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_788" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_788" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_789" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_789" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_790" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_790" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_791" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_791" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_792" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_792" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_793" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_793" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_794" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_794" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_795" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_795" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_796" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_796" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_797" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_797" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_798" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_798" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_799" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_799" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_800" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_800" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_801" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_801" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_802" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_802" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_803" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_803" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_804" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_804" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_805" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_805" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_806" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_806" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_807" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_807" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_808" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_808" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_809" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_809" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_810" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_810" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_811" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_811" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_812" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_812" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_813" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_813" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_814" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_814" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_815" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_815" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_816" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_816" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_817" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_817" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_818" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_818" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_819" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_819" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_820" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_820" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_821" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_821" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_822" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_822" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_823" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_823" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_824" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_824" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_825" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_825" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_826" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_826" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_827" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_827" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_828" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_828" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_829" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_829" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_830" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_830" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_831" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_831" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_832" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_832" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_833" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_833" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_834" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_834" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_835" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_835" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_836" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_836" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_837" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_837" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_838" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_838" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_839" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_839" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_840" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_840" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_841" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_841" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_842" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_842" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_843" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_843" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_844" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_844" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_845" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_845" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_846" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_846" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_847" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_847" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_848" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_848" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_849" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_849" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_850" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_850" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_851" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_851" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_852" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_852" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_853" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_853" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_854" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_854" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_855" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_855" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_856" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_856" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_857" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_857" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_858" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_858" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_859" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_859" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_860" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_860" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_861" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_861" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_862" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_862" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_863" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_863" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_864" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_864" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_865" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_865" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_866" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_866" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_867" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_867" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_868" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_868" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_869" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_869" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_870" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_870" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_871" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_871" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_872" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_872" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_873" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_873" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_874" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_874" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_875" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_875" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_876" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_876" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_877" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_877" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_878" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_878" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_879" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_879" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_880" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_880" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_881" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_881" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_882" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_882" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_883" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_883" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_884" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_884" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_885" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_885" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_886" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_886" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_887" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_887" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_888" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_888" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_889" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_889" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_890" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_890" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_891" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_891" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_892" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_892" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_893" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_893" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_894" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_894" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_895" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_895" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_896" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_896" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_897" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_897" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_898" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_898" owning_logical_component="Home Assistant"></state_variable>
+    <state_variable name="HAEntityID_899" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityID_899" owning_logical_component="Home Assistant"></state_variable>
 
     <state_variable name="FanSet_0" owning_logical_component="Home Assistant" state_center_type="string" user_editable="yes" note="Fan Speed Off">0</state_variable>
     <state_variable name="FanSet_1" owning_logical_component="Home Assistant" state_center_type="string" user_editable="yes" note="Fan Speed Low">2</state_variable>
@@ -182,72 +1075,25 @@
       </status_message>
 
 
-      <!-- Automatic HA entity catalog. Each state is dynamically suffixed with the
-           persistent numeric Savant ID: LightingEntityMap_001, HVACEntityMap_300, etc. -->
-      <status_message name="LightingEntityCatalog">
-        <data type="character" terminator="_lightingmap===" terminator_type="character">
-          <update state="CatalogID" type="string"/>
+      <!-- Mirrors the proven Ezlo DeviceIDs parser:
+           haid:001,entity:SWITCH | switch.example | Friendly Name
+           updates HAEntityID_001 through append_data_to_state_names. -->
+      <status_message name="HAEntityIDs">
+        <constant type="character">haid:</constant>
+        <data type="character" terminator_type="hex" terminator="2C">
+          <update state="HAAddress" type="string"></update>
         </data>
+        <constant type="character">entity:</constant>
         <data type="character" terminator_type="end_of_data">
-          <update state="LightingEntityMap" type="string"/>
+          <update state="HAEntityID" type="string"></update>
         </data>
-        <append_data_to_state_names state="CatalogID"/>
+        <append_data_to_state_names state="HAAddress"/>
       </status_message>
 
-      <status_message name="HVACEntityCatalog">
-        <data type="character" terminator="_hvacmap===" terminator_type="character">
-          <update state="CatalogID" type="string"/>
-        </data>
+      <status_message name="HAEntityCatalogSummary">
+        <constant type="character">hacatalog:</constant>
         <data type="character" terminator_type="end_of_data">
-          <update state="HVACEntityMap" type="string"/>
-        </data>
-        <append_data_to_state_names state="CatalogID"/>
-      </status_message>
-
-      <status_message name="FanEntityCatalog">
-        <data type="character" terminator="_fanmap===" terminator_type="character">
-          <update state="CatalogID" type="string"/>
-        </data>
-        <data type="character" terminator_type="end_of_data">
-          <update state="FanEntityMap" type="string"/>
-        </data>
-        <append_data_to_state_names state="CatalogID"/>
-      </status_message>
-
-      <status_message name="LockEntityCatalog">
-        <data type="character" terminator="_lockmap===" terminator_type="character">
-          <update state="CatalogID" type="string"/>
-        </data>
-        <data type="character" terminator_type="end_of_data">
-          <update state="LockEntityMap" type="string"/>
-        </data>
-        <append_data_to_state_names state="CatalogID"/>
-      </status_message>
-
-      <status_message name="GarageEntityCatalog">
-        <data type="character" terminator="_garagemap===" terminator_type="character">
-          <update state="CatalogID" type="string"/>
-        </data>
-        <data type="character" terminator_type="end_of_data">
-          <update state="GarageEntityMap" type="string"/>
-        </data>
-        <append_data_to_state_names state="CatalogID"/>
-      </status_message>
-
-      <status_message name="ShadeEntityCatalog">
-        <data type="character" terminator="_shademap===" terminator_type="character">
-          <update state="CatalogID" type="string"/>
-        </data>
-        <data type="character" terminator_type="end_of_data">
-          <update state="ShadeEntityMap" type="string"/>
-        </data>
-        <append_data_to_state_names state="CatalogID"/>
-      </status_message>
-
-      <status_message name="EntityCatalogSummary">
-        <constant type="character">catalog_summary===</constant>
-        <data type="character" terminator_type="end_of_data">
-          <update state="EntityCatalogSummary" type="string"/>
+          <update state="HAEntityCatalogSummary" type="string"></update>
         </data>
       </status_message>
 
