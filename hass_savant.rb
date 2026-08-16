@@ -224,6 +224,13 @@ class EntityIdRegistry
     h
   end
 
+  def export_hash
+    {
+      'version' => 1,
+      'entities' => @entries
+    }
+  end
+
   private
 
   def normalize_id(value)
@@ -806,6 +813,10 @@ class SavantConn < EM::Connection
     when 'catalog_refresh'
       log(:info, :manual_catalog_refresh_requested, current_identity)
       @proxy.refresh_catalog(current_identity)
+    when 'registry_export'
+      payload = @proxy.registry_json
+      send_data("registry_json===#{payload}\n")
+      log(:info, :registry_export_sent, current_identity, payload.bytesize)
     when 'subscribe_all_events'
       @subscribe_all = (args.first.to_s.strip.upcase == 'YES')
       @proxy.save_subs(current_identity, subscribe_all: @subscribe_all)
@@ -888,6 +899,10 @@ class HassProxy
 
   def savant_id_for(entity_id)
     @entity_ids.id_for(entity_id)
+  end
+
+  def registry_json
+    JSON.generate(@entity_ids.export_hash)
   end
 
   def refresh_catalog(identity = nil)
