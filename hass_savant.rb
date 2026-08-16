@@ -56,10 +56,12 @@ class EntityIdRegistry
   attr_reader :path
 
   def self.default_path
+    # /config is shared with Home Assistant and can be reached from Terminal,
+    # File Editor, Samba, Studio Code, etc. Prefer it for field commissioning.
     candidates = [
       ENV['SAVANT_ENTITY_MAP_FILE'],
-      '/data/savant_entity_ids.json',
       '/config/savant_entity_ids.json',
+      '/data/savant_entity_ids.json',
       '/tmp/savant_entity_ids.json'
     ].compact.reject(&:empty?)
 
@@ -80,6 +82,20 @@ class EntityIdRegistry
     @path = path
     @entries = {}       # entity_id => metadata
     @id_to_entity = {}  # "001" => entity_id
+
+    # One-time migration from the previous private add-on location.
+    legacy = '/data/savant_entity_ids.json'
+    if @path == '/config/savant_entity_ids.json' &&
+       !File.file?(@path) &&
+       File.file?(legacy)
+      begin
+        FileUtils.cp(legacy, @path)
+        log(:info, :entity_id_registry_migrated, legacy, @path)
+      rescue StandardError => e
+        log(:error, :entity_id_registry_migration_error,
+            legacy, @path, e.class.name, e.message)
+      end
+    end
 
     if ENV['RESET_SAVANT_ENTITY_MAP'].to_s == '1' && File.file?(@path)
       File.delete(@path)
