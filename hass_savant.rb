@@ -1,10 +1,6 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# v6.5 SAFE performance patch
-# ONLY fixes replay_cached(only:) fan-out bug.
-# Keeps v6.4 discovery, registry, catalog replay, feedback protocol and XML 4.8 compatibility unchanged.
-
 # Savant <-> Home Assistant TCP proxy (multi-profile)
 # Goals:
 # - Multiple Savant profiles can connect simultaneously (lights, HVAC, locks, shades)
@@ -1192,10 +1188,10 @@ def ensure_ha_subscribed(entity_ids)
     client = @clients[identity]
     return unless client
 
-    # v6.5 SAFE:
-    # When subscribe_entity requests one entity, replay ONLY that entity.
-    # The previous implementation ignored `only:` and replayed every subscribed
-    # entity, causing O(N^2) traffic and very high CPU on embedded Savant hosts.
+    # v6.5 SAFE: honor only: so a single subscribe_entity replays ONLY that
+    # entity instead of the whole prof[:subs] set (kills the N x N fan-out seen
+    # on the embedded Smart Host-S2). only: and prof[:subs].keys are BOTH
+    # resolved HA entity_ids, so the select matches with no format mismatch.
     ids = if only
             requested = Array(only).map(&:to_s)
             prof[:subs].keys.select { |eid| requested.include?(eid) }
