@@ -6,7 +6,7 @@ state from **Home Assistant**. The add-on runs a small Ruby proxy
 Assistant WebSocket API on the other. The matching Savant blueprint profile is
 `hass_savant.xml`.
 
-- **Add-on version:** 1.1.74
+- **Add-on version:** 1.1.75
 - **Savant profile version:** 4.8
 
 ---
