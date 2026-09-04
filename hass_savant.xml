@@ -6,9 +6,10 @@
            alias="Home Assistant"
            device_class="Lighting_controller"
            minimum_component_engine_version="0"
-           rpm_xml_version="4.8">
+           rpm_xml_version="4.9">
 
   <notes>
+    4.9 : LEAN embedded-host optimization. Compact Lighting feedback and reduced keepalive load.
     4.8 : Ezlo-style RAW entity ID map in System State; removes decorated catalog values from TrackEntity paths.
     4.7 : Discovery only on fresh Savant host/profile connection; no periodic polling. Manual RefreshEntityCatalog action included.
     4.6 : Persistent numeric HA IDs + Ezlo-style System State entity registry (001-899).
@@ -52,6 +53,7 @@
     <state_variable name="state_filter" owning_logical_component="Home Assistant" state_center_type="string" state_center_binding="state_filter" user_editable="yes">brightness,state,cover,lock,current_position,switch</state_variable>
     <state_variable name="HassEntityArray" owning_logical_component="Home Assistant" state_center_type="string" state_center_binding="HassEntityArray"></state_variable>
     <state_variable name="CurrentDimmerLevel" owning_logical_component="Home Assistant" state_center_type="integer" state_center_binding="CurrentDimmerLevel">0</state_variable>
+    <state_variable name="EntityID" owning_logical_component="Home Assistant" state_center_type="string" state_center_binding="EntityID"></state_variable>
 
     <!-- Ezlo-style predeclared persistent HA ID registry. -->
     <state_variable name="HAEntityCatalogSummary" receive_updates_from_state_center="yes" state_center_type="string" state_center_binding="HAEntityCatalogSummary" owning_logical_component="Home Assistant"></state_variable>
@@ -967,6 +969,18 @@
     </implementation>
 
     <status_messages>
+      <!-- v4.9 Lean: compact Lighting feedback, e.g. lvl:003,100 -->
+      <status_message name="LightLevelLean">
+        <constant type="character">lvl:</constant>
+        <data type="character" terminator="," terminator_type="character">
+          <update state="EntityID" type="string"/>
+        </data>
+        <data type="character" terminator_type="end_of_data">
+          <update state="CurrentDimmerLevel" type="integer"/>
+        </data>
+        <append_data_to_state_names state="EntityID"/>
+      </status_message>
+
       <status_message name="ShadeLevel">
         <data type="character" terminator="_current_position===" terminator_type="character">
           <update state="EntityID" type="string" />
@@ -1136,7 +1150,7 @@
             <unique_identifier name="DeviceID" address_component="1"/>
           </valueSource>
         </slider_representation>
-        <query_status_with_action name="TrackEntity" period_ms="60000">
+        <query_status_with_action name="TrackEntity" period_ms="600000">
           <with_arg name="Address1" address_component="1" format="%s" />
         </query_status_with_action>
       </entity>
@@ -1252,7 +1266,7 @@
             <unique_identifier address_component="1" name="Address1" format="%s"/>
           </valueSource>
         </slider_representation>
-        <query_status_with_action name="TrackEntity" period_ms="60000">
+        <query_status_with_action name="TrackEntity" period_ms="600000">
           <with_arg name="Address1" address_component="1" format="%s" />
         </query_status_with_action>
       </entity>
@@ -1267,7 +1281,7 @@
             <unique_identifier name="Address1" address_component="1" format="%s"/>
           </toggleOnUsingState>
         </toggle_button_representation>
-        <query_status_with_action name="TrackEntity" period_ms="60000">
+        <query_status_with_action name="TrackEntity" period_ms="600000">
           <with_arg name="Address1" address_component="1" format="%s" />
         </query_status_with_action>
       </entity>
@@ -1287,11 +1301,11 @@
           </toggleOnUsingState>
         </toggle_button_representation>
 
-        <query_status_with_action name="TrackEntity" period_ms="60000">
+        <query_status_with_action name="TrackEntity" period_ms="600000">
           <with_arg name="Address1" address_component="1" format="%s" />
         </query_status_with_action>
 
-        <query_status_with_action name="TrackEntity" period_ms="60000">
+        <query_status_with_action name="TrackEntity" period_ms="600000">
           <with_arg name="Address1" address_component="2" format="%s" />
         </query_status_with_action>
       </entity>
@@ -1346,7 +1360,7 @@
             <unique_identifier name="href" address_component="1" format="%s" />
           </toggleOnUsingState>
         </toggle_button_representation>
-        <query_status_with_action name="TrackEntity" period_ms="60000">
+        <query_status_with_action name="TrackEntity" period_ms="600000">
           <with_arg name="Address1" address_component="1" format="%s" />
         </query_status_with_action>
       </entity>
@@ -1389,7 +1403,7 @@
           <release_action name="UnlockDoorLock"/>
           <toggle_release_action name="LockDoorLock"/>
         </toggle_button_representation>
-        <query_status_with_action name="TrackEntity" period_ms="60000">
+        <query_status_with_action name="TrackEntity" period_ms="600000">
           <with_arg name="Address1" address_component="1" format="%s" />
         </query_status_with_action>
       </entity>
@@ -1441,7 +1455,7 @@
           <release_action name="OpenGarageDoor"/>
           <toggle_release_action name="CloseGarageDoor"/>
         </toggle_button_representation>
-        <query_status_with_action name="TrackEntity" period_ms="60000">
+        <query_status_with_action name="TrackEntity" period_ms="600000">
           <with_arg name="Address1" address_component="1" format="%s" />
         </query_status_with_action>
       </entity>
@@ -1464,7 +1478,7 @@
              subscribe" handshake, which raced against the 60s TrackEntity sweep
              and produced empty "subscribe_entity," commands (stale UI on host
              boot). Fires at connect (initial query) and every period_ms as a
-             keepalive; the proxy dedupes and replays cached state on subscribe. -->
+             keepalive; v6.5 proxy replays only this entity and dedupes unchanged feedback. -->
         <command_interface interface="ip">
           <command response_required="no">
             <parameter_list>
@@ -1482,7 +1496,7 @@
              TrackEntity now). This only re-asserts event subscription and the
              state filter after a (re)connect, so there is no empty-subscribe
              race. -->
-        <execute_on_schedule period_ms="15000"/>
+        <execute_on_schedule period_ms="60000"/>
         <execute_action_after_delay ms_delay="500" action_name="SubscribeEvents" action_type="CUSTOM"></execute_action_after_delay>
         <execute_action_after_delay ms_delay="1000" action_name="StateFilter" action_type="CUSTOM"></execute_action_after_delay>
       </action>
