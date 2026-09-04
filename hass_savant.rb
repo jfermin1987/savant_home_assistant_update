@@ -1,6 +1,13 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+# v6.5 LEAN (Embedded Host optimization)
+# - Fix replay_cached(only:) so subscribe_entity replays ONLY requested entities
+# - No automatic catalog discovery/replay on Savant reconnect
+# - Per-client output dedupe
+# - Compact Lighting feedback: lvl:<id>,<0-100>
+# - Keeps persistent numeric registry + registry_export + manual catalog_refresh
+
 # Savant <-> Home Assistant TCP proxy (multi-profile)
 # Goals:
 # - Multiple Savant profiles can connect simultaneously (lights, HVAC, locks, shades)
@@ -678,6 +685,7 @@ class SavantConn < EM::Connection
     @subscribe_all = false
     @bound = false
     @catalog_ready = false
+    @last_sent = {}
   end
 
   def post_init
@@ -710,7 +718,24 @@ class SavantConn < EM::Connection
 
   def send_update(entity_id, key, value)
     savant_id = @proxy.savant_id_for(entity_id) || entity_id
+    cache_key = "#{savant_id}:#{key}"
+    normalized = value.to_s
+    return if @last_sent[cache_key] == normalized
+
+    @last_sent[cache_key] = normalized
     send_data("#{savant_id}_#{key}===#{value}\n")
+  rescue StandardError => e
+    log(:error, :savant_send_error, e.class.name, e.message)
+  end
+
+  def send_light_level(entity_id, level)
+    savant_id = @proxy.savant_id_for(entity_id) || entity_id
+    lvl = [[level.to_i, 0].max, 100].min
+    cache_key = "#{savant_id}:light_level"
+    return if @last_sent[cache_key] == lvl
+
+    @last_sent[cache_key] = lvl
+    send_data("lvl:#{savant_id},#{lvl}\n")
   rescue StandardError => e
     log(:error, :savant_send_error, e.class.name, e.message)
   end
@@ -910,10 +935,10 @@ class HassProxy
   end
 
   def on_client_ready(identity)
-    # First state_filter on a fresh Savant TCP session = host/profile online.
-    # Run one fresh HA inventory discovery here and nowhere periodically.
-    log(:info, :catalog_client_ready, identity, :known_ids, @entity_ids.entries.length)
-    request_discovery(identity, reason: :savant_connect)
+    # v6.5 Lean: persistent mappings mean reconnect does not require discovery.
+    # catalog_refresh remains available for commissioning/new entities.
+    log(:info, :client_ready_lean, identity, :known_ids, @entity_ids.entries.length)
+    replay_cached(identity)
   end
 
   def register_client(conn)
@@ -936,9 +961,8 @@ class HassProxy
 
     conn.bind_profile!(profile_id, restore: { filter: prof[:filter], subs: prof[:subs].keys })
 
-    # Prime normal UI from local cache. The first state_filter on this fresh
-    # TCP session triggers the one-time discovery.
-    replay_cached(profile_id)
+    # v6.5 Lean: no replay here. The first state_filter marks the
+    # connection ready and performs one deduped cached replay.
   end
 
   def save_filter(identity, filter)
@@ -967,7 +991,7 @@ class HassProxy
         @subs_by_sig[sig] = prof[:subs].dup
         log(:info, :subs_restored_by_filter, sig, prof[:subs].length)
         @ha.ensure_subscribed(prof[:subs].keys)
-        replay_cached(identity)
+        # v6.5 Lean: replay is deferred to on_client_ready.
       end
     end
 
@@ -1188,7 +1212,14 @@ def ensure_ha_subscribed(entity_ids)
     client = @clients[identity]
     return unless client
 
-    prof[:subs].keys.each do |entity_id|
+    ids = if only
+            requested = Array(only).map(&:to_s)
+            prof[:subs].keys.select { |eid| requested.include?(eid) }
+          else
+            prof[:subs].keys
+          end
+
+    ids.each do |entity_id|
       packed = @entity_cache[entity_id]
       next unless packed
       forward_entity_to_client(client, entity_id, packed, prof[:filter])
@@ -1261,10 +1292,9 @@ def ensure_ha_subscribed(entity_ids)
           :catalog_ids, @entity_ids.entries.length,
           :changed, catalog_changed)
 
-      # Exactly one full catalog delivery for this discovery cycle.
-      replay_catalog(target)
-
-      # This same snapshot initializes subscribed Savant states after boot.
+      # v6.5 Lean: registry is authoritative in HA and exported via registry_export.
+      # Do not replay the full ID map into Savant State Center.
+      # Refresh the local cache; per-client output dedupe prevents unchanged feedback.
       msg['states'].each { |eid, packed| apply_full_state(eid, packed) }
       return
     end
@@ -1338,13 +1368,26 @@ def ensure_ha_subscribed(entity_ids)
   def forward_entity_to_client(client, entity_id, packed, filter)
     state = packed['s']
     attrs = packed['a'] || {}
+    domain = entity_id.to_s.split('.', 2).first
 
-    # A light/cover that is off (or unavailable) has had its brightness/position
-    # attributes REMOVED by HA, not zeroed. Normalize those to 0 here so any
-    # level-bound UI element in Savant actually drops instead of keeping its last
-    # value and looking like it's still on.
+    # v6.5 Lean: Lighting/Switch feedback uses ONE compact state update.
+    # This directly drives CurrentDimmerLevel_<ID> in the v4.9 Lean XML.
+    if domain == 'switch' || domain == 'light'
+      off_like = state.nil? || OFF_STATES.include?(state.to_s.downcase)
+      level = if off_like
+                0
+              elsif domain == 'light' && attrs['brightness']
+                ((attrs['brightness'].to_f / 255.0) * 100).round
+              else
+                100
+              end
+      client.send_light_level(entity_id, level)
+      return
+    end
+
+    # Non-lighting domains retain the existing filtered protocol.
+    # send_update() now dedupes unchanged values per Savant connection.
     off_like = state.nil? || OFF_STATES.include?(state.to_s.downcase)
-
     fkeys = Array(filter)
 
     fkeys.each do |k|
@@ -1357,8 +1400,6 @@ def ensure_ha_subscribed(entity_ids)
         v = off_like ? 0 : attrs['brightness']
         client.send_update(entity_id, 'brightness', v) unless v.nil?
       when 'brightness_pct'
-        # HA reports brightness on a 0-255 scale; the command path uses 0-100.
-        # Normalize feedback to 0-100 so the slider matches what we send.
         v = if off_like
               0
             elsif attrs['brightness']
@@ -1374,14 +1415,6 @@ def ensure_ha_subscribed(entity_ids)
       end
     end
 
-    # Safety net: even if a profile's state_filter didn't explicitly request a
-    # level key, make sure dimmer tiles collapse on OFF. Harmless if unbound.
-    if off_like && entity_id.start_with?('light.')
-      client.send_update(entity_id, 'brightness', 0)     unless fkeys.include?('brightness')
-      client.send_update(entity_id, 'brightness_pct', 0) unless fkeys.include?('brightness_pct')
-    end
-
-    # HVAC UI helpers (some XMLs bind to these explicitly)
     if entity_id.start_with?('climate.')
       hvac_mode = attrs['hvac_mode']
       hvac_action = attrs['hvac_action']
