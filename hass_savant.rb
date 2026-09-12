@@ -1,6 +1,11 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+# v1.1.77 diagnostic feedback tracing
+# - Adds HA state receive, Savant subscription routing, and wire-output logs for light/switch entities
+# - DOES NOT change control, discovery, subscriptions, feedback payloads, IDs, or XML compatibility
+# - Intended to diagnose Savant 11.0.5 UI feedback behavior
+
 # v1.1.76 entity-registry filtering
 # - Catalog discovery now merges HA get_states with Entity Registry metadata
 # - Excludes entity_category=config/diagnostic
@@ -778,6 +783,16 @@ class SavantConn < EM::Connection
 
   def send_update(entity_id, key, value)
     savant_id = @proxy.savant_id_for(entity_id) || entity_id
+
+    if entity_id.start_with?('switch.', 'light.')
+      log(:info, :to_savant,
+          :id, savant_id,
+          :entity, entity_id,
+          :key, key,
+          :value, value,
+          :wire, "#{savant_id}_#{key}===#{value}")
+    end
+
     send_data("#{savant_id}_#{key}===#{value}\n")
   rescue StandardError => e
     log(:error, :savant_send_error, e.class.name, e.message)
@@ -1394,6 +1409,13 @@ def ensure_ha_subscribed(entity_ids)
   def apply_full_state(entity_id, packed)
     full = { 's' => packed['s'], 'a' => (packed['a'] || {}) }
     @entity_cache[entity_id] = full
+
+    if entity_id.start_with?('switch.', 'light.')
+      log(:info, :ha_state_rx_full,
+          :entity, entity_id,
+          :state, full['s'])
+    end
+
     forward_entity(entity_id, full)
   end
 
@@ -1420,15 +1442,33 @@ def ensure_ha_subscribed(entity_ids)
     end
 
     @entity_cache[entity_id] = merged
+
+    if entity_id.start_with?('switch.', 'light.')
+      log(:info, :ha_state_rx_delta,
+          :entity, entity_id,
+          :state, merged['s'],
+          :diff, diff)
+    end
+
     forward_entity(entity_id, merged)
   end
 
   def forward_entity(entity_id, packed)
     @clients.each_value do |client|
-      next unless client.subscribed_to?(entity_id)
+      subscribed = client.subscribed_to?(entity_id)
+      identity = client.respond_to?(:identity) ? client.identity : client.client_key
+
+      if entity_id.start_with?('switch.', 'light.')
+        log(:info, :feedback_route,
+            :entity, entity_id,
+            :state, packed['s'],
+            :client, identity,
+            :subscribed, subscribed)
+      end
+
+      next unless subscribed
 
       # use the *profile* filter if we have it (so we can restore by signature accurately)
-      identity = client.respond_to?(:identity) ? client.identity : client.client_key
       prof = @profiles[identity]
       filter = prof ? prof[:filter] : client.filter
 
