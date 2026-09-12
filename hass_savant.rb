@@ -1,6 +1,12 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+# v1.1.78 pending numeric subscription fix
+# - Queues Savant numeric subscribe_entity IDs until the catalog mapping exists
+# - Resolves queued IDs after catalog discovery, subscribes HA with canonical entity_ids
+# - Rejects unresolved numeric IDs from HA subscribe_entities
+# - Preserves v1.1.77 diagnostic tracing and all v1.1.76 behavior
+
 # v1.1.77 diagnostic feedback tracing
 # - Adds HA state receive, Savant subscription routing, and wire-output logs for light/switch entities
 # - DOES NOT change control, discovery, subscriptions, feedback payloads, IDs, or XML compatibility
@@ -827,6 +833,14 @@ class SavantConn < EM::Connection
   def filter = @filter
   def subscriptions = @subs.keys
 
+  # v1.1.78: allow the proxy to attach a canonical HA entity_id after a
+  # numeric Savant subscription arrived before catalog discovery completed.
+  def add_subscription!(entity_id)
+    eid = entity_id.to_s.strip
+    return if eid.empty?
+    @subs[eid] = true
+  end
+
   # Called by proxy when we learn/confirm the stable profile_id
   def bind_profile!(pid, restore: nil)
     @profile_id = pid
@@ -911,10 +925,29 @@ class SavantConn < EM::Connection
         return
       end
 
-      canonical_ids = ids.map { |requested| @proxy.resolve_entity(requested) }
-      canonical_ids.each { |e| @subs[e] = true }
-      @proxy.save_subs(current_identity, add: canonical_ids)
-      @proxy.on_client_subscribe(current_identity, canonical_ids)
+      canonical_ids = []
+      pending_ids = []
+
+      ids.each do |requested|
+        resolved = @proxy.resolve_subscription(requested)
+        if resolved
+          canonical_ids << resolved
+          @subs[resolved] = true
+        else
+          pending_ids << requested
+        end
+      end
+
+      unless pending_ids.empty?
+        @proxy.save_pending_subs(current_identity, pending_ids)
+        log(:warn, :numeric_subscriptions_pending,
+            current_identity, pending_ids.length, pending_ids)
+      end
+
+      unless canonical_ids.empty?
+        @proxy.save_subs(current_identity, add: canonical_ids)
+        @proxy.on_client_subscribe(current_identity, canonical_ids)
+      end
     else
       # Safety net: opportunistically subscribe to the entity we're controlling
       # so its state feedback flows even if the periodic subscribe handshake
@@ -955,6 +988,7 @@ class HassProxy
     @subs_by_sig = {} # filter signature => subs hash
     @identity_to_sig = {}
     @sig_to_identity = {}
+    @pending_numeric_subs_by_identity = {} # identity => { "013" => true }
     @last_refresh_at = 0.0
     @pending_discovery_states = nil
     @pending_discovery_registry = nil
@@ -980,6 +1014,30 @@ class HassProxy
     end
 
     @entity_ids.resolve(raw)
+  end
+
+  # Resolve a subscription target. Numeric Savant IDs are only valid after
+  # the persistent/catalog registry knows their HA entity_id mapping.
+  # Returning nil tells SavantConn to queue the subscription instead of sending
+  # an invalid value such as "013" to Home Assistant.
+  def resolve_subscription(value)
+    raw = value.to_s.strip
+    resolved = resolve_entity(raw)
+
+    if raw.match?(/\A\d{1,3}\z/) && resolved == raw
+      return nil
+    end
+
+    valid_ha_entity_id?(resolved) ? resolved : nil
+  end
+
+  def save_pending_subs(identity, ids)
+    pending = (@pending_numeric_subs_by_identity[identity] ||= {})
+    Array(ids).each do |value|
+      raw = value.to_s.strip
+      next unless raw.match?(/\A\d{1,3}\z/)
+      pending[format('%03d', raw.to_i)] = true
+    end
   end
 
   def savant_id_for(entity_id)
@@ -1012,6 +1070,13 @@ class HassProxy
 
   def bind_profile(conn, profile_id)
     prof = (@profiles[profile_id] ||= { filter: ['state'], subs: {}, subscribe_all: false })
+
+    # If subscriptions arrived before the stable profile id was known, move their
+    # pending numeric addresses from the transient connection key to profile_id.
+    if conn.client_key != profile_id && @pending_numeric_subs_by_identity[conn.client_key]
+      dst = (@pending_numeric_subs_by_identity[profile_id] ||= {})
+      dst.merge!(@pending_numeric_subs_by_identity.delete(conn.client_key))
+    end
 
     # Re-key the live connection from its transient client_key to the stable Savant profile_id
     if @clients[conn.client_key] == conn
@@ -1051,7 +1116,7 @@ class HassProxy
         prof[:subs] = restored.dup
         @subs_by_sig[sig] = prof[:subs].dup
         log(:info, :subs_restored_by_filter, sig, prof[:subs].length)
-        @ha.ensure_subscribed(prof[:subs].keys)
+        ensure_ha_subscribed(prof[:subs].keys)
         replay_cached(identity)
       end
     end
@@ -1086,7 +1151,7 @@ def save_subs(identity, add: nil, subscribe_all: nil)
 
     prof[:subs] = stored.dup
     log(:info, :subs_restored, identity, prof[:subs].length)
-    @ha.ensure_subscribed(prof[:subs].keys)
+    ensure_ha_subscribed(prof[:subs].keys)
     replay_cached(identity)
     true
   end
@@ -1100,8 +1165,15 @@ def save_subs(identity, add: nil, subscribe_all: nil)
   end
 
 def ensure_ha_subscribed(entity_ids)
-    # subscribe_entities provides the initial snapshot for these entities.
-    @ha.ensure_subscribed(entity_ids)
+    # v1.1.78 safety gate: Home Assistant only accepts canonical entity_ids.
+    # Never let early Savant numeric addresses (001, 013, 704...) reach
+    # subscribe_entities before the catalog registry can resolve them.
+    ids = Array(entity_ids).map(&:to_s).map(&:strip).reject(&:empty?)
+    valid = ids.select { |eid| valid_ha_entity_id?(eid) }
+    rejected = ids - valid
+
+    log(:warn, :ha_subscribe_rejected_non_entity_ids, rejected) unless rejected.empty?
+    @ha.ensure_subscribed(valid) unless valid.empty?
   end
 
   def handle_action(cmd, args)
@@ -1266,6 +1338,59 @@ def ensure_ha_subscribed(entity_ids)
 
   private
 
+  def valid_ha_entity_id?(value)
+    value.to_s.match?(/\A[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\z/)
+  end
+
+  def resolve_pending_subscriptions!
+    return if @pending_numeric_subs_by_identity.empty?
+
+    @pending_numeric_subs_by_identity.keys.each do |identity|
+      pending = @pending_numeric_subs_by_identity[identity]
+      next unless pending && !pending.empty?
+
+      resolved = []
+      unresolved = []
+
+      pending.keys.each do |numeric_id|
+        entity_id = @entity_ids.resolve(numeric_id)
+        if valid_ha_entity_id?(entity_id)
+          resolved << [numeric_id, entity_id]
+        else
+          unresolved << numeric_id
+        end
+      end
+
+      next if resolved.empty?
+
+      client = @clients[identity]
+      prof = (@profiles[identity] ||= { filter: ['state'], subs: {}, subscribe_all: false })
+      canonical_ids = []
+
+      resolved.each do |numeric_id, entity_id|
+        pending.delete(numeric_id)
+        prof[:subs][entity_id] = true
+        client&.add_subscription!(entity_id)
+        canonical_ids << entity_id
+      end
+
+      save_subs(identity, add: canonical_ids)
+      ensure_ha_subscribed(canonical_ids)
+
+      log(:info, :pending_subscriptions_resolved,
+          :identity, identity,
+          :count, canonical_ids.length,
+          :mappings, resolved.map { |numeric_id, entity_id| "#{numeric_id}=#{entity_id}" })
+
+      @pending_numeric_subs_by_identity.delete(identity) if pending.empty?
+
+      unless unresolved.empty?
+        log(:warn, :pending_subscriptions_still_unresolved,
+            :identity, identity, :ids, unresolved)
+      end
+    end
+  end
+
   def replay_cached(identity, only: nil)
     prof = @profiles[identity]
     return unless prof && !prof[:subs].empty?
@@ -1398,6 +1523,12 @@ def ensure_ha_subscribed(entity_ids)
         :entity_registry, registry.length,
         :catalog_ids, @entity_ids.entries.length,
         :changed, catalog_changed)
+
+    # Savant 11.x can issue subscribe_entity commands with numeric addresses before
+    # first catalog discovery completes. Resolve those queued addresses now that
+    # the ID registry is populated, attach them to the live profile, and subscribe
+    # HA using canonical entity_ids before forwarding the inventory snapshot.
+    resolve_pending_subscriptions!
 
     replay_catalog(target)
 
