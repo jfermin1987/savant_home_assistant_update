@@ -1,26 +1,5 @@
-#!/usr/bin/env ruby
+ #!/usr/bin/env ruby
 # frozen_string_literal: true
-
-# v1.1.78 pending numeric subscription fix
-# - Queues Savant numeric subscribe_entity IDs until the catalog mapping exists
-# - Resolves queued IDs after catalog discovery, subscribes HA with canonical entity_ids
-# - Rejects unresolved numeric IDs from HA subscribe_entities
-# - Preserves v1.1.77 diagnostic tracing and all v1.1.76 behavior
-
-# v1.1.77 diagnostic feedback tracing
-# - Adds HA state receive, Savant subscription routing, and wire-output logs for light/switch entities
-# - DOES NOT change control, discovery, subscriptions, feedback payloads, IDs, or XML compatibility
-# - Intended to diagnose Savant 11.0.5 UI feedback behavior
-
-# v1.1.76 entity-registry filtering
-# - Catalog discovery now merges HA get_states with Entity Registry metadata
-# - Excludes entity_category=config/diagnostic
-# - Excludes auxiliary switch.* entities from Sonos
-# - Preserves numeric-ID ranges and v6.5 SAFE subscribe_entity fix
-
-# v6.5 SAFE performance patch
-# ONLY fixes replay_cached(only:) fan-out bug.
-# Keeps v6.4 discovery, registry, catalog replay, feedback protocol and XML 4.8 compatibility unchanged.
 
 # Savant <-> Home Assistant TCP proxy (multi-profile)
 # Goals:
@@ -143,22 +122,14 @@ class EntityIdRegistry
     @entries.values.sort_by { |e| e['id'].to_i }
   end
 
-  def refresh(states, registry_meta = {})
+  def refresh(states)
     changed = false
     now = Time.now.utc.iso8601
     seen = {}
 
-    excluded = Hash.new(0)
-
     candidates = states.map do |entity_id, packed|
       attrs = packed.is_a?(Hash) ? (packed['a'] || {}) : {}
-      meta = registry_meta[entity_id.to_s] || {}
-
-      category, exclude_reason = classify_category(entity_id, attrs, meta)
-      if exclude_reason
-        excluded[exclude_reason] += 1
-        next
-      end
+      category = classify_category(entity_id, attrs)
       next unless category
 
       eid = entity_id.to_s
@@ -168,16 +139,12 @@ class EntityIdRegistry
         'entity_id' => eid,
         'category' => category,
         'device_type' => classify_device_type(entity_id, attrs),
-        'friendly_name' => (attrs['friendly_name'] || meta['name'] || entity_id).to_s,
+        'friendly_name' => (attrs['friendly_name'] || entity_id).to_s,
         'device_class' => attrs['device_class'].to_s,
-        'platform' => meta['platform'].to_s,
-        'entity_category' => meta['entity_category'].to_s,
         'active' => true,
         'last_seen' => now
       }
     end.compact
-
-    log(:info, :catalog_filter_summary, excluded) unless excluded.empty?
 
     # Deterministic first assignment: category, then HA entity_id.
     candidates.sort_by { |c| [CATEGORY_ORDER.index(c['category']) || 999, c['entity_id']] }.each do |c|
@@ -195,7 +162,7 @@ class EntityIdRegistry
         # would invalidate Savant data tables/scenes.
         c['category'] = existing['category'] if existing['category']
 
-        %w[category device_type friendly_name device_class platform entity_category active].each do |k|
+        %w[category device_type friendly_name device_class active].each do |k|
           if existing[k] != c[k]
             existing[k] = c[k]
             changed = true
@@ -273,42 +240,23 @@ class EntityIdRegistry
     format('%03d', s.to_i)
   end
 
-  def classify_category(entity_id, attrs, meta = {})
+  def classify_category(entity_id, attrs)
     domain = entity_id.to_s.split('.', 2).first
-    return [nil, nil] unless %w[light switch climate fan lock cover].include?(domain)
-
-    platform = meta['platform'].to_s.downcase
-    entity_category = meta['entity_category'].to_s.downcase
-    disabled_by = meta['disabled_by']
-    hidden_by = meta['hidden_by']
-
-    # Disabled entities should never be commissioned into Savant.
-    return [nil, 'disabled'] unless disabled_by.nil? || disabled_by.to_s.empty?
-
-    # HA uses config/diagnostic for controls that are not primary user-facing loads.
-    return [nil, "entity_category:#{entity_category}"] if %w[config diagnostic].include?(entity_category)
-
-    # Sonos creates many switch helpers (crossfade, loudness, night sound,
-    # speech enhancement, surround, TV autoplay, etc.). These are audio settings,
-    # not lighting loads, so never place them in the Savant Lighting ID range.
-    return [nil, 'platform:sonos_switch'] if domain == 'switch' && platform == 'sonos'
-
-    category =
-      case domain
-      when 'light', 'switch'
-        'lighting'
-      when 'climate'
-        'hvac'
-      when 'fan'
-        'fan'
-      when 'lock'
-        'lock'
-      when 'cover'
-        dc = attrs['device_class'].to_s.downcase
-        %w[garage gate].include?(dc) ? 'garage' : 'shade'
-      end
-
-    [category, nil]
+    case domain
+    when 'light', 'switch'
+      'lighting'
+    when 'climate'
+      'hvac'
+    when 'fan'
+      'fan'
+    when 'lock'
+      'lock'
+    when 'cover'
+      dc = attrs['device_class'].to_s.downcase
+      %w[garage gate].include?(dc) ? 'garage' : 'shade'
+    else
+      nil
+    end
   end
 
   def classify_device_type(entity_id, attrs)
@@ -431,7 +379,6 @@ class HaWs
 
     # Track in-flight get_states requests so we can recognize the large response.
     @pending_get_states = {}
-    @pending_entity_registry = {}
 
     @on_event = nil
     @on_ready = nil
@@ -459,7 +406,6 @@ class HaWs
 
     # Clear in-flight bookkeeping on stop/restart
     @pending_get_states.clear
-    @pending_entity_registry.clear
     @inflight.clear
   end
 
@@ -493,10 +439,6 @@ class HaWs
     send_json(type: 'get_states', _track_get_states: true)
   end
 
-  def get_entity_registry
-    send_json(type: 'config/entity_registry/list', _track_entity_registry: true)
-  end
-
   private
 
   def next_id
@@ -520,27 +462,25 @@ class HaWs
     id = pl[:id] || pl['id']
     return unless id
     @inflight[id] = pl
-    @pending_get_states[id] = true if pl[:_track_get_states]
-    @pending_entity_registry[id] = true if pl[:_track_entity_registry]
+    if pl[:_track_get_states]
+      @pending_get_states[id] = true
+    end
   end
 
   def untrack_inflight!(id)
     @inflight.delete(id) if id
     @pending_get_states.delete(id) if id
-    @pending_entity_registry.delete(id) if id
   end
 
   def resend_with_new_id!(old_id)
     payload = @inflight.delete(old_id)
-    was_get_states = !!@pending_get_states.delete(old_id)
-    was_entity_registry = !!@pending_entity_registry.delete(old_id)
+    @pending_get_states.delete(old_id)
 
     return unless payload
 
-    # Remove internal tracking keys
+    # Remove internal tracking key
     payload = payload.dup
     payload.delete(:_track_get_states)
-    payload.delete(:_track_entity_registry)
 
     # Bump id far ahead and resend with new id
     new_id = nil
@@ -551,7 +491,7 @@ class HaWs
     end
 
     payload[:id] = new_id
-    track_inflight!(payload.merge(_track_get_states: was_get_states, _track_entity_registry: was_entity_registry))
+    track_inflight!(payload.merge(_track_get_states: false))
     json = JSON.generate(payload)
     @ws&.send(json)
     log(:warn, :id_reuse_retry, old_id, :new_id, new_id, :type, (payload[:type] || payload['type']))
@@ -564,15 +504,11 @@ class HaWs
       begin
         pl = payload.dup
 
-        # Internal markers (not part of HA protocol) for catalog inventory requests.
+        # Internal marker (not part of HA protocol) to track get_states
         track_get_states = !!pl.delete(:_track_get_states)
-        track_entity_registry = !!pl.delete(:_track_entity_registry)
 
         pl[:id] ||= next_id
-        track_inflight!(pl.merge(
-          _track_get_states: track_get_states,
-          _track_entity_registry: track_entity_registry
-        ))
+        track_inflight!(pl.merge(_track_get_states: track_get_states))
 
         json = JSON.generate(pl)
         @ws.send(json)
@@ -631,7 +567,6 @@ class HaWs
       # Clear in-flight; HA will have dropped these anyway.
       @inflight.clear
       @pending_get_states.clear
-      @pending_entity_registry.clear
       schedule_reconnect
     end
 
@@ -690,6 +625,7 @@ class HaWs
     when 'result'
       id = msg['id']
       if msg['success']
+        # get_states returns an array of full states; convert to packed form and synthesize an event
         if @pending_get_states.delete(id) && msg['result'].is_a?(Array)
           states = {}
           msg['result'].each do |st|
@@ -698,21 +634,6 @@ class HaWs
             states[eid] = { 's' => st['state'], 'a' => (st['attributes'] || {}) }
           end
           @on_event&.call({ 'type' => 'get_states', 'states' => states })
-        elsif @pending_entity_registry.delete(id) && msg['result'].is_a?(Array)
-          registry = {}
-          msg['result'].each do |entry|
-            eid = entry['entity_id']
-            next unless eid
-            registry[eid] = {
-              'platform' => entry['platform'],
-              'entity_category' => entry['entity_category'],
-              'disabled_by' => entry['disabled_by'],
-              'hidden_by' => entry['hidden_by'],
-              'device_id' => entry['device_id'],
-              'name' => entry['name'] || entry['original_name']
-            }
-          end
-          @on_event&.call({ 'type' => 'entity_registry', 'registry' => registry })
         end
         untrack_inflight!(id)
       else
@@ -789,16 +710,6 @@ class SavantConn < EM::Connection
 
   def send_update(entity_id, key, value)
     savant_id = @proxy.savant_id_for(entity_id) || entity_id
-
-    if entity_id.start_with?('switch.', 'light.')
-      log(:info, :to_savant,
-          :id, savant_id,
-          :entity, entity_id,
-          :key, key,
-          :value, value,
-          :wire, "#{savant_id}_#{key}===#{value}")
-    end
-
     send_data("#{savant_id}_#{key}===#{value}\n")
   rescue StandardError => e
     log(:error, :savant_send_error, e.class.name, e.message)
@@ -832,14 +743,6 @@ class SavantConn < EM::Connection
 
   def filter = @filter
   def subscriptions = @subs.keys
-
-  # v1.1.78: allow the proxy to attach a canonical HA entity_id after a
-  # numeric Savant subscription arrived before catalog discovery completed.
-  def add_subscription!(entity_id)
-    eid = entity_id.to_s.strip
-    return if eid.empty?
-    @subs[eid] = true
-  end
 
   # Called by proxy when we learn/confirm the stable profile_id
   def bind_profile!(pid, restore: nil)
@@ -925,29 +828,10 @@ class SavantConn < EM::Connection
         return
       end
 
-      canonical_ids = []
-      pending_ids = []
-
-      ids.each do |requested|
-        resolved = @proxy.resolve_subscription(requested)
-        if resolved
-          canonical_ids << resolved
-          @subs[resolved] = true
-        else
-          pending_ids << requested
-        end
-      end
-
-      unless pending_ids.empty?
-        @proxy.save_pending_subs(current_identity, pending_ids)
-        log(:warn, :numeric_subscriptions_pending,
-            current_identity, pending_ids.length, pending_ids)
-      end
-
-      unless canonical_ids.empty?
-        @proxy.save_subs(current_identity, add: canonical_ids)
-        @proxy.on_client_subscribe(current_identity, canonical_ids)
-      end
+      canonical_ids = ids.map { |requested| @proxy.resolve_entity(requested) }
+      canonical_ids.each { |e| @subs[e] = true }
+      @proxy.save_subs(current_identity, add: canonical_ids)
+      @proxy.on_client_subscribe(current_identity, canonical_ids)
     else
       # Safety net: opportunistically subscribe to the entity we're controlling
       # so its state feedback flows even if the periodic subscribe handshake
@@ -988,10 +872,7 @@ class HassProxy
     @subs_by_sig = {} # filter signature => subs hash
     @identity_to_sig = {}
     @sig_to_identity = {}
-    @pending_numeric_subs_by_identity = {} # identity => { "013" => true }
     @last_refresh_at = 0.0
-    @pending_discovery_states = nil
-    @pending_discovery_registry = nil
 
     @ha = HaWs.new(token: token, address: address)
     @ha.on_event { |msg| handle_ha_event(msg) }
@@ -1014,30 +895,6 @@ class HassProxy
     end
 
     @entity_ids.resolve(raw)
-  end
-
-  # Resolve a subscription target. Numeric Savant IDs are only valid after
-  # the persistent/catalog registry knows their HA entity_id mapping.
-  # Returning nil tells SavantConn to queue the subscription instead of sending
-  # an invalid value such as "013" to Home Assistant.
-  def resolve_subscription(value)
-    raw = value.to_s.strip
-    resolved = resolve_entity(raw)
-
-    if raw.match?(/\A\d{1,3}\z/) && resolved == raw
-      return nil
-    end
-
-    valid_ha_entity_id?(resolved) ? resolved : nil
-  end
-
-  def save_pending_subs(identity, ids)
-    pending = (@pending_numeric_subs_by_identity[identity] ||= {})
-    Array(ids).each do |value|
-      raw = value.to_s.strip
-      next unless raw.match?(/\A\d{1,3}\z/)
-      pending[format('%03d', raw.to_i)] = true
-    end
   end
 
   def savant_id_for(entity_id)
@@ -1070,13 +927,6 @@ class HassProxy
 
   def bind_profile(conn, profile_id)
     prof = (@profiles[profile_id] ||= { filter: ['state'], subs: {}, subscribe_all: false })
-
-    # If subscriptions arrived before the stable profile id was known, move their
-    # pending numeric addresses from the transient connection key to profile_id.
-    if conn.client_key != profile_id && @pending_numeric_subs_by_identity[conn.client_key]
-      dst = (@pending_numeric_subs_by_identity[profile_id] ||= {})
-      dst.merge!(@pending_numeric_subs_by_identity.delete(conn.client_key))
-    end
 
     # Re-key the live connection from its transient client_key to the stable Savant profile_id
     if @clients[conn.client_key] == conn
@@ -1116,7 +966,7 @@ class HassProxy
         prof[:subs] = restored.dup
         @subs_by_sig[sig] = prof[:subs].dup
         log(:info, :subs_restored_by_filter, sig, prof[:subs].length)
-        ensure_ha_subscribed(prof[:subs].keys)
+        @ha.ensure_subscribed(prof[:subs].keys)
         replay_cached(identity)
       end
     end
@@ -1151,7 +1001,7 @@ def save_subs(identity, add: nil, subscribe_all: nil)
 
     prof[:subs] = stored.dup
     log(:info, :subs_restored, identity, prof[:subs].length)
-    ensure_ha_subscribed(prof[:subs].keys)
+    @ha.ensure_subscribed(prof[:subs].keys)
     replay_cached(identity)
     true
   end
@@ -1165,15 +1015,8 @@ def save_subs(identity, add: nil, subscribe_all: nil)
   end
 
 def ensure_ha_subscribed(entity_ids)
-    # v1.1.78 safety gate: Home Assistant only accepts canonical entity_ids.
-    # Never let early Savant numeric addresses (001, 013, 704...) reach
-    # subscribe_entities before the catalog registry can resolve them.
-    ids = Array(entity_ids).map(&:to_s).map(&:strip).reject(&:empty?)
-    valid = ids.select { |eid| valid_ha_entity_id?(eid) }
-    rejected = ids - valid
-
-    log(:warn, :ha_subscribe_rejected_non_entity_ids, rejected) unless rejected.empty?
-    @ha.ensure_subscribed(valid) unless valid.empty?
+    # subscribe_entities provides the initial snapshot for these entities.
+    @ha.ensure_subscribed(entity_ids)
   end
 
   def handle_action(cmd, args)
@@ -1338,59 +1181,6 @@ def ensure_ha_subscribed(entity_ids)
 
   private
 
-  def valid_ha_entity_id?(value)
-    value.to_s.match?(/\A[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\z/)
-  end
-
-  def resolve_pending_subscriptions!
-    return if @pending_numeric_subs_by_identity.empty?
-
-    @pending_numeric_subs_by_identity.keys.each do |identity|
-      pending = @pending_numeric_subs_by_identity[identity]
-      next unless pending && !pending.empty?
-
-      resolved = []
-      unresolved = []
-
-      pending.keys.each do |numeric_id|
-        entity_id = @entity_ids.resolve(numeric_id)
-        if valid_ha_entity_id?(entity_id)
-          resolved << [numeric_id, entity_id]
-        else
-          unresolved << numeric_id
-        end
-      end
-
-      next if resolved.empty?
-
-      client = @clients[identity]
-      prof = (@profiles[identity] ||= { filter: ['state'], subs: {}, subscribe_all: false })
-      canonical_ids = []
-
-      resolved.each do |numeric_id, entity_id|
-        pending.delete(numeric_id)
-        prof[:subs][entity_id] = true
-        client&.add_subscription!(entity_id)
-        canonical_ids << entity_id
-      end
-
-      save_subs(identity, add: canonical_ids)
-      ensure_ha_subscribed(canonical_ids)
-
-      log(:info, :pending_subscriptions_resolved,
-          :identity, identity,
-          :count, canonical_ids.length,
-          :mappings, resolved.map { |numeric_id, entity_id| "#{numeric_id}=#{entity_id}" })
-
-      @pending_numeric_subs_by_identity.delete(identity) if pending.empty?
-
-      unless unresolved.empty?
-        log(:warn, :pending_subscriptions_still_unresolved,
-            :identity, identity, :ids, unresolved)
-      end
-    end
-  end
-
   def replay_cached(identity, only: nil)
     prof = @profiles[identity]
     return unless prof && !prof[:subs].empty?
@@ -1398,10 +1188,10 @@ def ensure_ha_subscribed(entity_ids)
     client = @clients[identity]
     return unless client
 
-    # v6.5 SAFE:
-    # When subscribe_entity requests one entity, replay ONLY that entity.
-    # The previous implementation ignored `only:` and replayed every subscribed
-    # entity, causing O(N^2) traffic and very high CPU on embedded Savant hosts.
+    # v6.5 SAFE: honor only: so a single subscribe_entity replays ONLY that
+    # entity instead of the whole prof[:subs] set (kills the N x N fan-out seen
+    # on the embedded Smart Host-S2). only: and prof[:subs].keys are BOTH
+    # resolved HA entity_ids, so the select matches with no format mismatch.
     ids = if only
             requested = Array(only).map(&:to_s)
             prof[:subs].keys.select { |eid| requested.include?(eid) }
@@ -1455,11 +1245,8 @@ def ensure_ha_subscribed(entity_ids)
     @last_refresh_at = now
     @catalog_discovery_target = identity
     @catalog_discovery_reason = reason
-    @pending_discovery_states = nil
-    @pending_discovery_registry = nil
     log(:info, :catalog_discovery_requested, :target, identity, :reason, reason)
     @ha.get_states
-    @ha.get_entity_registry
   rescue StandardError => e
     log(:error, :catalog_discovery_request_error, e.class.name, e.message)
   end
@@ -1473,14 +1260,23 @@ def ensure_ha_subscribed(entity_ids)
 
   def handle_ha_event(msg)
     if msg['type'] == 'get_states' && msg['states'].is_a?(Hash)
-      @pending_discovery_states = msg['states']
-      process_catalog_inventory_if_ready
-      return
-    end
+      target = @catalog_discovery_target
+      reason = @catalog_discovery_reason || :unknown
+      @catalog_discovery_target = nil
+      @catalog_discovery_reason = nil
 
-    if msg['type'] == 'entity_registry' && msg['registry'].is_a?(Hash)
-      @pending_discovery_registry = msg['registry']
-      process_catalog_inventory_if_ready
+      catalog_changed = @entity_ids.refresh(msg['states'])
+      log(:info, :catalog_inventory_received,
+          :reason, reason,
+          :ha_states, msg['states'].length,
+          :catalog_ids, @entity_ids.entries.length,
+          :changed, catalog_changed)
+
+      # Exactly one full catalog delivery for this discovery cycle.
+      replay_catalog(target)
+
+      # This same snapshot initializes subscribed Savant states after boot.
+      msg['states'].each { |eid, packed| apply_full_state(eid, packed) }
       return
     end
 
@@ -1504,49 +1300,10 @@ def ensure_ha_subscribed(entity_ids)
     log(:error, :ha_event_error, e.class.name, e.message)
   end
 
-  def process_catalog_inventory_if_ready
-    states = @pending_discovery_states
-    registry = @pending_discovery_registry
-    return unless states && registry
-
-    target = @catalog_discovery_target
-    reason = @catalog_discovery_reason || :unknown
-    @catalog_discovery_target = nil
-    @catalog_discovery_reason = nil
-    @pending_discovery_states = nil
-    @pending_discovery_registry = nil
-
-    catalog_changed = @entity_ids.refresh(states, registry)
-    log(:info, :catalog_inventory_received,
-        :reason, reason,
-        :ha_states, states.length,
-        :entity_registry, registry.length,
-        :catalog_ids, @entity_ids.entries.length,
-        :changed, catalog_changed)
-
-    # Savant 11.x can issue subscribe_entity commands with numeric addresses before
-    # first catalog discovery completes. Resolve those queued addresses now that
-    # the ID registry is populated, attach them to the live profile, and subscribe
-    # HA using canonical entity_ids before forwarding the inventory snapshot.
-    resolve_pending_subscriptions!
-
-    replay_catalog(target)
-
-    # Cache all HA states, but only subscribed entities are forwarded to Savant.
-    states.each { |eid, packed| apply_full_state(eid, packed) }
-  end
-
   # Store a FULL state snapshot and forward it.
   def apply_full_state(entity_id, packed)
     full = { 's' => packed['s'], 'a' => (packed['a'] || {}) }
     @entity_cache[entity_id] = full
-
-    if entity_id.start_with?('switch.', 'light.')
-      log(:info, :ha_state_rx_full,
-          :entity, entity_id,
-          :state, full['s'])
-    end
-
     forward_entity(entity_id, full)
   end
 
@@ -1573,33 +1330,15 @@ def ensure_ha_subscribed(entity_ids)
     end
 
     @entity_cache[entity_id] = merged
-
-    if entity_id.start_with?('switch.', 'light.')
-      log(:info, :ha_state_rx_delta,
-          :entity, entity_id,
-          :state, merged['s'],
-          :diff, diff)
-    end
-
     forward_entity(entity_id, merged)
   end
 
   def forward_entity(entity_id, packed)
     @clients.each_value do |client|
-      subscribed = client.subscribed_to?(entity_id)
-      identity = client.respond_to?(:identity) ? client.identity : client.client_key
-
-      if entity_id.start_with?('switch.', 'light.')
-        log(:info, :feedback_route,
-            :entity, entity_id,
-            :state, packed['s'],
-            :client, identity,
-            :subscribed, subscribed)
-      end
-
-      next unless subscribed
+      next unless client.subscribed_to?(entity_id)
 
       # use the *profile* filter if we have it (so we can restore by signature accurately)
+      identity = client.respond_to?(:identity) ? client.identity : client.client_key
       prof = @profiles[identity]
       filter = prof ? prof[:filter] : client.filter
 
