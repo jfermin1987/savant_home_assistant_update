@@ -388,6 +388,188 @@ class EntityIdRegistry
 end
 
 # -------------------------
+# Energy monitor bridge (Deye / Savant Power style)
+# -------------------------
+#
+# Turns a set of Home Assistant power/energy sensors into the state stream a
+# Savant "Energy_Resource_monitor" profile (Hass_Energy_Monitor.xml) expects.
+#
+# Phase 1 = MONITORING ONLY. We emit discrete, labelled state lines:
+#
+#   Chan1Power===<watts>     (per channel, by fixed uid)
+#   ...
+#   TotalPower===<watts>
+#   BatterySOC===<percent>
+#   IsOffGridDetected===<0|1>
+#
+# Fixed channels (uid) keep the map deterministic across reboots, exactly like
+# the numeric entity-ID registry does for lighting. The channel->entity map is
+# a plain JSON file in /config so it can be tuned on site without editing code;
+# if the file is absent we fall back to the Deye single-phase hybrid defaults
+# that were validated against the live inverter.
+class EnergyBridge
+  # Deye SUN single-phase hybrid (Solarman logger) validated sensor names.
+  # sign: multiply the raw HA value by this before sending (to flip a reversed
+  # convention without touching code). Grid: + = importing (matches Savant Feed).
+  DEFAULT_MAP = {
+    'channels' => [
+      { 'uid' => 1, 'entity_id' => 'sensor.inverter_pv_power',      'role' => 'production',  'name' => 'Solar PV', 'sign' => 1 },
+      { 'uid' => 2, 'entity_id' => 'sensor.inverter_grid_power',    'role' => 'feed',        'name' => 'Grid',     'sign' => 1 },
+      { 'uid' => 3, 'entity_id' => 'sensor.inverter_load_power',    'role' => 'consumption', 'name' => 'Load',     'sign' => 1 },
+      { 'uid' => 4, 'entity_id' => 'sensor.inverter_battery_power', 'role' => 'battery',     'name' => 'Battery',  'sign' => 1 }
+    ],
+    # Total defaults to the consumption channel; override with an explicit
+    # entity_id or leave null to sum all consumption-role channels.
+    'total_entity_id' => 'sensor.inverter_load_power',
+    'battery_soc'     => 'sensor.inverter_battery',
+    # grid_status: an entity whose OFF-like state means "grid is down".
+    # For the Deye the cleanest off-grid signal is grid power/voltage dropping to
+    # 0; device_state stays "Normal" off-grid, so this is a Phase-2 refinement.
+    'grid_status'      => 'sensor.inverter_device_state',
+    'grid_online_states' => %w[normal on_grid grid on] # anything else => off-grid
+  }.freeze
+
+  def self.default_path
+    candidates = [
+      ENV['SAVANT_ENERGY_MAP_FILE'],
+      '/config/savant_energy_map.json',
+      '/data/savant_energy_map.json',
+      '/tmp/savant_energy_map.json'
+    ].compact.reject(&:empty?)
+    candidates.find { |c| File.file?(c) } || candidates.last
+  end
+
+  attr_reader :path
+
+  def initialize(path: self.class.default_path)
+    @path = path
+    @map = load_map
+    index!
+    log(:info, :energy_bridge_map,
+        :path, @path,
+        :channels, @channels.length,
+        :entities, entities.length)
+  end
+
+  # Every HA entity this bridge needs subscribed.
+  def entities
+    ids = @channels.map { |c| c['entity_id'] }
+    ids << @map['total_entity_id'] if @map['total_entity_id']
+    ids << @map['battery_soc'] if @map['battery_soc']
+    ids << @map['grid_status'] if @map['grid_status']
+    ids.compact.uniq
+  end
+
+  def tracks?(entity_id)
+    @tracked[entity_id.to_s] == true
+  end
+
+  # Build the full set of state lines from the current entity cache.
+  # cache: { entity_id => { 's' => state, 'a' => attrs } }
+  # returns: array of ["StateName", value] pairs, ready to send as Name===value
+  def compose(cache)
+    out = []
+    total_from_channels = 0.0
+    saw_consumption = false
+
+    @channels.each do |ch|
+      w = watts(cache, ch['entity_id'], ch['sign'])
+      out << ["Chan#{ch['uid']}Power", w.round]
+      if ch['role'] == 'consumption'
+        total_from_channels += w
+        saw_consumption = true
+      end
+    end
+
+    total =
+      if @map['total_entity_id']
+        watts(cache, @map['total_entity_id'], 1).round
+      elsif saw_consumption
+        total_from_channels.round
+      else
+        0
+      end
+    out << ['TotalPower', total]
+
+    if @map['battery_soc']
+      soc = num(cache, @map['battery_soc'])
+      out << ['BatterySOC', soc.round] unless soc.nil?
+    end
+
+    unless @map['grid_status'].to_s.empty?
+      out << ['IsOffGridDetected', grid_online?(cache) ? 0 : 1]
+    end
+
+    out
+  end
+
+  private
+
+  def index!
+    @channels = Array(@map['channels']).map do |c|
+      {
+        'uid'       => c['uid'].to_i,
+        'entity_id' => c['entity_id'].to_s,
+        'role'      => (c['role'] || 'consumption').to_s,
+        'name'      => (c['name'] || c['entity_id']).to_s,
+        'sign'      => (c['sign'] || 1).to_f
+      }
+    end.reject { |c| c['entity_id'].empty? }
+
+    @tracked = {}
+    entities.each { |e| @tracked[e] = true }
+  end
+
+  # HA state -> watts (numeric), applying the channel sign. Non-numeric or
+  # missing states report 0 so a tile collapses rather than freezing.
+  def watts(cache, entity_id, sign)
+    v = num(cache, entity_id)
+    return 0.0 if v.nil?
+
+    v * (sign || 1).to_f
+  end
+
+  def num(cache, entity_id)
+    packed = cache[entity_id]
+    return nil unless packed
+
+    s = packed['s'].to_s.strip
+    return nil if s.empty?
+    return nil if %w[unknown unavailable none].include?(s.downcase)
+
+    begin
+      Float(s)
+    rescue ArgumentError, TypeError
+      nil
+    end
+  end
+
+  def grid_online?(cache)
+    packed = cache[@map['grid_status']]
+    return true unless packed # assume on-grid if we don't know
+
+    s = packed['s'].to_s.strip.downcase
+    online = Array(@map['grid_online_states']).map { |x| x.to_s.downcase }
+    online.include?(s)
+  end
+
+  def load_map
+    return DEFAULT_MAP.dup unless @path && File.file?(@path)
+
+    raw = JSON.parse(File.read(@path))
+    # Shallow-merge onto defaults so a partial file still works.
+    merged = DEFAULT_MAP.dup
+    raw.each { |k, v| merged[k] = v }
+    log(:info, :energy_bridge_map_loaded, @path)
+    merged
+  rescue StandardError => e
+    log(:error, :energy_bridge_map_error, @path, e.class.name, e.message)
+    DEFAULT_MAP.dup
+  end
+end
+
+
+# -------------------------
 # HA WebSocket client
 # -------------------------
 
@@ -746,6 +928,7 @@ class SavantConn < EM::Connection
     @subscribe_all = false
     @bound = false
     @catalog_ready = false
+    @energy_client = false # set true when this profile declares itself an energy monitor
   end
 
   def post_init
@@ -781,6 +964,23 @@ class SavantConn < EM::Connection
     send_data("#{savant_id}_#{key}===#{value}\n")
   rescue StandardError => e
     log(:error, :savant_send_error, e.class.name, e.message)
+  end
+
+  def energy_client? = @energy_client
+
+  def mark_energy_client!
+    @energy_client = true
+  end
+
+  # Emit a batch of labelled energy state lines: Name===value
+  def send_energy(pairs)
+    return if pairs.nil? || pairs.empty?
+
+    buf = +''
+    pairs.each { |name, value| buf << "#{name}===#{value}\n" }
+    send_data(buf)
+  rescue StandardError => e
+    log(:error, :savant_energy_send_error, e.class.name, e.message)
   end
 
   def send_catalog_mapping(id, entity_id)
@@ -885,9 +1085,14 @@ class SavantConn < EM::Connection
       payload = @proxy.registry_json
       send_data("registry_json===#{payload}\n")
       log(:info, :registry_export_sent, current_identity, payload.bytesize)
-    when 'subscribe_all_events'
-      @subscribe_all = (args.first.to_s.strip.upcase == 'YES')
-      @proxy.save_subs(current_identity, subscribe_all: @subscribe_all)
+    when 'energy_monitor'
+      # An Energy_Resource_monitor profile (Hass_Energy_Monitor.xml) declaring
+      # itself. The bridge knows which HA sensors to read from its energy map,
+      # subscribes them on HA, and pushes SET/Chan state lines to this client.
+      unless @energy_client
+        mark_energy_client!
+        @proxy.on_energy_client_ready(self)
+      end
     when 'subscribe_entity'
       ids = args.join(',').split(',').map(&:strip).reject(&:empty?)
       if ids.empty?
@@ -932,6 +1137,7 @@ class HassProxy
 
   def initialize(token:, address: HaWs::DEFAULT_WS)
     @entity_ids = EntityIdRegistry.new
+    @energy = EnergyBridge.new
 
     @clients = {} # conn_id => conn
     @profiles = {}
@@ -984,6 +1190,37 @@ class HassProxy
     # Run one fresh HA inventory discovery here and nowhere periodically.
     log(:info, :catalog_client_ready, identity, :known_ids, @entity_ids.entries.length)
     request_discovery(identity, reason: :savant_connect)
+  end
+
+  # An energy-monitor profile declared itself. Make sure HA is streaming the
+  # sensors the energy map needs, then push a snapshot immediately so the
+  # Savant energy tiles aren't blank until the next HA change.
+  def on_energy_client_ready(conn)
+    ids = @energy.entities
+    log(:info, :energy_client_ready, conn.identity, :entities, ids.length)
+    @ha.ensure_subscribed(ids)
+    push_energy(conn)
+  end
+
+  # Compose the current energy snapshot and send it to one energy client, or to
+  # all of them when conn is nil (used by the keepalive timer).
+  def push_energy(conn = nil)
+    pairs = @energy.compose(@entity_cache)
+    return if pairs.empty?
+
+    targets =
+      if conn
+        [conn]
+      else
+        @clients.values.select { |c| c.respond_to?(:energy_client?) && c.energy_client? }
+      end
+    targets.each { |c| c.send_energy(pairs) }
+  rescue StandardError => e
+    log(:error, :push_energy_error, e.class.name, e.message)
+  end
+
+  def energy_clients?
+    @clients.values.any? { |c| c.respond_to?(:energy_client?) && c.energy_client? }
   end
 
   def register_client(conn)
@@ -1424,7 +1661,18 @@ def ensure_ha_subscribed(entity_ids)
   end
 
   def forward_entity(entity_id, packed)
+    # Energy monitors get a recomposed snapshot (Chan/Total/SOC/off-grid) rather
+    # than raw entity===value lines. Push once per changed energy-tracked entity.
+    if @energy.tracks?(entity_id)
+      @clients.each_value do |client|
+        next unless client.respond_to?(:energy_client?) && client.energy_client?
+
+        client.send_energy(@energy.compose(@entity_cache))
+      end
+    end
+
     @clients.each_value do |client|
+      next if client.respond_to?(:energy_client?) && client.energy_client?
       next unless client.subscribed_to?(entity_id)
 
       # use the *profile* filter if we have it (so we can restore by signature accurately)
@@ -1533,6 +1781,14 @@ EM.run do
   proxy.start
 
   EM.start_server(bind, port, SavantConn, proxy)
+
+  # Energy keepalive: re-push the current snapshot to any connected energy
+  # monitor on a fixed cadence. Keeps Savant graphs live between HA changes and
+  # re-primes a monitor that reconnected. No-op when no energy client is present.
+  energy_interval = (ENV['SAVANT_ENERGY_PUSH_INTERVAL'] || '15').to_f
+  EM.add_periodic_timer(energy_interval) do
+    proxy.push_energy if proxy.energy_clients?
+  end
 
   # No periodic discovery. New inventory is requested once when Savant opens
   # a fresh profile TCP session. Manual RefreshEntityCatalog remains available.
