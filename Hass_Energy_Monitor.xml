@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="racepoint_component_profile.xsd"
     manufacturer="Hass" model="Energy_Monitor" alias="Hass Energy monitoring" device_class="Energy_Resource_monitor"
-        minimum_component_engine_version="10.2" rpm_xml_version="1.11">
-    
+        minimum_component_engine_version="10.2" rpm_xml_version="2.0">
+
     <notes>
+      - Ver 2.0 : Multi-channel energy monitor fed by the HA-Savant bridge (hass_savant.rb, EnergyBridge module).
+                  Channels are FIXED by uid: 1=Solar PV, 2=Grid (import +/export -), 3=Load, 4=Battery.
+                  Bridge pushes discrete state lines: ChanNPower===, TotalPower===, BatterySOC===, IsOffGridDetected===.
+                  The channel->HA-entity map lives in /config/savant_energy_map.json on the add-on side.
+                  Phase 1 = monitoring only. Production/Consumption/Feed data-table classification is a Phase-2 refinement.
       - Ver 1.10 First working version with the help of Benumc. Fl0zan0
     </notes>
 
@@ -13,7 +18,7 @@
           <receive_end_condition test_condition="data" type="hex">0A</receive_end_condition>
         </ip>
     </control_interfaces>
-   
+
     <media_interfaces>
         <data name_on_component="Ethernet">
             <combined_media>
@@ -21,21 +26,35 @@
               <control port="8080"/>
             </combined_media>
           </data>
-        
+
           <internal name_on_component="Resource Monitor">
             <environmental_media></environmental_media>
             <resource resource_type="ENV_ENERGYRESOURCEMONITOR_SOURCE"/>
-        </internal>    
+        </internal>
     </media_interfaces>
-    
+
     <state_variable_list>
+        <!-- Handshake / bookkeeping -->
         <state_variable name="subscribe_all_events" owning_logical_component="Monitor" state_center_type="string" user_editable="yes">NO</state_variable>
-        <state_variable name="state_filter" owning_logical_component="Monitor" state_center_type="string" state_center_binding="state_filter" user_editable="yes">state</state_variable>
-        <state_variable name="HassEntityId" owning_logical_component="Monitor" state_center_type="string" state_center_binding="HassEntityId" user_editable="yes">HassEntityId - without power</state_variable>
-        <state_variable name="CurrentEnergyModeName" state_center_binding="CurrentEnergyModeName" owning_logical_component="Monitor" state_center_type="string"></state_variable>
-        <state_variable name="CurrentEnergyMode" state_center_binding="CurrentEnergyMode" owning_logical_component="Monitor" state_center_type="integer"></state_variable>
+
+        <!-- Live power channels (watts). Fixed uid mapping set by the bridge. -->
+        <state_variable name="Chan1Power" state_center_binding="Chan1Power" owning_logical_component="Monitor" state_center_type="integer">0</state_variable>
+        <state_variable name="Chan2Power" state_center_binding="Chan2Power" owning_logical_component="Monitor" state_center_type="integer">0</state_variable>
+        <state_variable name="Chan3Power" state_center_binding="Chan3Power" owning_logical_component="Monitor" state_center_type="integer">0</state_variable>
+        <state_variable name="Chan4Power" state_center_binding="Chan4Power" owning_logical_component="Monitor" state_center_type="integer">0</state_variable>
+        <state_variable name="TotalPower" state_center_binding="TotalPower" owning_logical_component="Monitor" state_center_type="integer">0</state_variable>
+
+        <!-- Battery + grid status -->
+        <state_variable name="BatterySOC" state_center_binding="BatterySOC" owning_logical_component="Monitor" state_center_type="integer">0</state_variable>
+        <state_variable name="IsOffGridDetected" state_center_binding="IsOffGridDetected" owning_logical_component="Monitor" state_center_type="integer">0</state_variable>
+
+        <!-- Energy-mode states (read-only in Phase 1; controlled in Phase 2) -->
+        <state_variable name="CurrentEnergyModeName" state_center_binding="CurrentEnergyModeName" owning_logical_component="Monitor" state_center_type="string">OnGrid</state_variable>
+        <state_variable name="CurrentEnergyMode" state_center_binding="CurrentEnergyMode" owning_logical_component="Monitor" state_center_type="integer">0</state_variable>
+
+        <!-- Native graph selection -->
         <state_variable name="GraphType" state_center_binding="GraphType" owning_logical_component="Monitor" state_center_type="string">day</state_variable>
-        <state_variable name="GraphSelection" state_center_binding="GraphSelection" owning_logical_component="Monitor" state_center_type="string">Chan1Power</state_variable>
+        <state_variable name="GraphSelection" state_center_binding="GraphSelection" owning_logical_component="Monitor" state_center_type="string">TotalPower</state_variable>
     </state_variable_list>
 
     <logical_component logical_component_name="Monitor">
@@ -44,108 +63,122 @@
         </implementation>
 
         <status_messages>
-          <status_message name="GetPower">
-            <data type="character" terminator="power_state===" terminator_type="character">
+          <!-- Each line arrives as Name===value\n. One status_message per label:
+               consume the label into junk, then read the remainder into the state. -->
+          <status_message name="GetChan1">
+            <data type="character" terminator="Chan1Power===" terminator_type="character">
               <update state="junk" type="string" />
             </data>
             <data type="character" terminator_type="end_of_data">
               <update state="Chan1Power" type="integer" />
             </data>
           </status_message>
+
+          <status_message name="GetChan2">
+            <data type="character" terminator="Chan2Power===" terminator_type="character">
+              <update state="junk" type="string" />
+            </data>
+            <data type="character" terminator_type="end_of_data">
+              <update state="Chan2Power" type="integer" />
+            </data>
+          </status_message>
+
+          <status_message name="GetChan3">
+            <data type="character" terminator="Chan3Power===" terminator_type="character">
+              <update state="junk" type="string" />
+            </data>
+            <data type="character" terminator_type="end_of_data">
+              <update state="Chan3Power" type="integer" />
+            </data>
+          </status_message>
+
+          <status_message name="GetChan4">
+            <data type="character" terminator="Chan4Power===" terminator_type="character">
+              <update state="junk" type="string" />
+            </data>
+            <data type="character" terminator_type="end_of_data">
+              <update state="Chan4Power" type="integer" />
+            </data>
+          </status_message>
+
+          <status_message name="GetTotal">
+            <data type="character" terminator="TotalPower===" terminator_type="character">
+              <update state="junk" type="string" />
+            </data>
+            <data type="character" terminator_type="end_of_data">
+              <update state="TotalPower" type="integer" />
+            </data>
+          </status_message>
+
+          <status_message name="GetBatterySOC">
+            <data type="character" terminator="BatterySOC===" terminator_type="character">
+              <update state="junk" type="string" />
+            </data>
+            <data type="character" terminator_type="end_of_data">
+              <update state="BatterySOC" type="integer" />
+            </data>
+          </status_message>
+
+          <status_message name="GetOffGrid">
+            <data type="character" terminator="IsOffGridDetected===" terminator_type="character">
+              <update state="junk" type="string" />
+            </data>
+            <data type="character" terminator_type="end_of_data">
+              <update state="IsOffGridDetected" type="integer" />
+            </data>
+          </status_message>
         </status_messages>
-        
+
         <resource_component_actions resource_type="ENV_ENERGYRESOURCEMONITOR_SOURCE">
-            <action name="SetGraphTypeDay">
-                <update_state_variable name="GraphType" update_type="set" update_source="constant">day</update_state_variable>
-                <command_interface interface="ip">
-                    <command></command>
-                </command_interface>
-            </action>
-            <action name="SetGraphTypeWeek">
-                <update_state_variable name="GraphType" update_type="set" update_source="constant">week</update_state_variable>
-                <command_interface interface="ip">
-                    <command></command>
-                </command_interface>
-            </action>
-            <action name="SetGraphTypeMonth">
-                <update_state_variable name="GraphType" update_type="set" update_source="constant">month</update_state_variable>
-                <command_interface interface="ip">
-                    <command></command>
-                </command_interface>
-            </action>
-            <action name="SetGraphTypeYear">
-                <update_state_variable name="GraphType" update_type="set" update_source="constant">year</update_state_variable>
-                <command_interface interface="ip">
-                    <command></command>
-                </command_interface>
-            </action>
-            <action name="SetGraphSelection1">
-                <update_state_variable name="GraphSelection" update_type="set" update_source="constant">Chan1Power</update_state_variable>
-                <command_interface interface="ip">
-                    <command></command>
-                </command_interface>
-            </action>
-            <action name="SetGraphSelection2">
-                <update_state_variable name="GraphSelection" update_type="set" update_source="constant">Chan2Power</update_state_variable>
-                <command_interface interface="ip">
-                    <command></command>
-                </command_interface>
-            </action>
-            <action name="SetGraphSelection3">
-                <update_state_variable name="GraphSelection" update_type="set" update_source="constant">Chan3Power</update_state_variable>
-                <command_interface interface="ip">
-                    <command></command>
-                </command_interface>
-            </action>
+          <action name="SetGraphTypeDay">
+            <update_state_variable name="GraphType" update_type="set" update_source="constant">day</update_state_variable>
+          </action>
+          <action name="SetGraphTypeWeek">
+            <update_state_variable name="GraphType" update_type="set" update_source="constant">week</update_state_variable>
+          </action>
+          <action name="SetGraphTypeMonth">
+            <update_state_variable name="GraphType" update_type="set" update_source="constant">month</update_state_variable>
+          </action>
+          <action name="SetGraphTypeYear">
+            <update_state_variable name="GraphType" update_type="set" update_source="constant">year</update_state_variable>
+          </action>
 
-            <entity name="Section" address_components="1">
-                <screen_representation>
-                </screen_representation>    
-            </entity>
-            <entity name="Channel" address_components="1">
-                <screen_representation>
-                </screen_representation>    
-            </entity>
+          <action name="SetGraphSelection1">
+            <update_state_variable name="GraphSelection" update_type="set" update_source="constant">Chan1Power</update_state_variable>
+          </action>
+          <action name="SetGraphSelection2">
+            <update_state_variable name="GraphSelection" update_type="set" update_source="constant">Chan2Power</update_state_variable>
+          </action>
+          <action name="SetGraphSelection3">
+            <update_state_variable name="GraphSelection" update_type="set" update_source="constant">Chan3Power</update_state_variable>
+          </action>
+          <action name="SetGraphSelection4">
+            <update_state_variable name="GraphSelection" update_type="set" update_source="constant">Chan4Power</update_state_variable>
+          </action>
+          <action name="SetGraphSelectionTotal">
+            <update_state_variable name="GraphSelection" update_type="set" update_source="constant">TotalPower</update_state_variable>
+          </action>
         </resource_component_actions>
-        
+
         <custom_component_actions>
+          <!-- On connect: declare ourselves an energy monitor. The bridge then
+               subscribes the Deye sensors from its energy map and starts pushing.
+               No subscribe_entity / state_filter needed here: the bridge owns the
+               sensor list, and we avoid triggering the lighting catalog discovery. -->
+          <action name="AwaitConnection">
+            <execute_on_schedule period_ms="0"/>
+            <execute_action_after_delay ms_delay="8000" action_name="DeclareEnergyMonitor" action_type="CUSTOM"></execute_action_after_delay>
+          </action>
 
-
-            <action name="AwaitConnection">
-              <execute_on_schedule period_ms="0"/>
-              <execute_action_after_delay ms_delay="11000" action_name="SubscribeEvents" action_type="CUSTOM"></execute_action_after_delay>
-              <execute_action_after_delay ms_delay="11000" action_name="StateFilter" action_type="CUSTOM"></execute_action_after_delay>
-              <execute_action_after_delay ms_delay="15000" action_name="SubscribeEntities" action_type="CUSTOM"></execute_action_after_delay>
-            </action>
-            <action name="SubscribeEvents">
-              <execute_on_state_variable_condition name="subscribe_all_events" test_condition="not_equal">NO</execute_on_state_variable_condition>
-              <command_interface interface="ip">
-                <command response_required="no">
-                  <command_string type="character">subscribe_events</command_string>
-                </command>
-              </command_interface>
-            </action>
-            <action name="StateFilter">
-              <command_interface interface="ip">
-                <command response_required="no">
-                  <command_string type="character">state_filter,</command_string>
-                  <parameter_list>
-                    <parameter parameter_data_type="character" state_variable="state_filter"/>
-                  </parameter_list>
-                </command>
-              </command_interface>
-            </action>
-            <action name="SubscribeEntities">
-              <command_interface interface="ip">
-                <command response_required="no">
-                  <parameter_list>
-                    <parameter parameter_data_type="character">subscribe_entity,</parameter>
-                    <parameter parameter_data_type="character" state_variable="HassEntityId"></parameter>
-                  </parameter_list>
-                  <delay ms_delay="50"/>
-                </command>
-              </command_interface>
-            </action>
-          </custom_component_actions>
- </logical_component>
+          <action name="DeclareEnergyMonitor">
+            <command_interface interface="ip">
+              <command response_required="no">
+                <command_string type="character">energy_monitor</command_string>
+              </command>
+            </command_interface>
+            <!-- Re-announce periodically so a bridge restart re-registers us. -->
+            <execute_on_schedule period_ms="30000"></execute_on_schedule>
+          </action>
+        </custom_component_actions>
+    </logical_component>
 </component>
