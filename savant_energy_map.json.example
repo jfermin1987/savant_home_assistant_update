@@ -1,0 +1,12 @@
+{
+  "channels": [
+    { "uid": 1, "entity_id": "sensor.inverter_pv_power",      "role": "production",  "name": "Solar PV", "sign": 1 },
+    { "uid": 2, "entity_id": "sensor.inverter_grid_power",    "role": "feed",        "name": "Grid",     "sign": 1 },
+    { "uid": 3, "entity_id": "sensor.inverter_load_power",    "role": "consumption", "name": "Load",     "sign": 1 },
+    { "uid": 4, "entity_id": "sensor.inverter_battery_power", "role": "battery",     "name": "Battery",  "sign": 1 }
+  ],
+  "total_entity_id": "sensor.inverter_load_power",
+  "battery_soc": "sensor.inverter_battery",
+  "grid_status": "sensor.inverter_device_state",
+  "grid_online_states": ["normal", "on_grid", "grid", "on"]
+}
