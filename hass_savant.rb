@@ -576,6 +576,9 @@ end
 class HaWs
   DEFAULT_WS = 'ws://supervisor/core/api/websocket'
   RESUB_CHUNK = 200
+  # If we haven't received ANYTHING from HA (event or pong) in this window, the
+  # socket is dead even though TCP thinks it's open — force a clean reconnect.
+  STALE_LIMIT = 75
 
   def initialize(token:, address: DEFAULT_WS)
     @token = token
@@ -606,6 +609,11 @@ class HaWs
 
     @on_event = nil
     @on_ready = nil
+
+    # Reconnect hardening.
+    @last_rx = Time.now            # last time HA sent us anything (event or pong)
+    @lifecycle_subscribed = false  # subscribed to homeassistant_started this session
+    @forcing_reconnect = false     # guard against reconnect loops
   end
 
   attr_reader :subscribed_entities
@@ -784,6 +792,7 @@ class HaWs
       @reconnect_attempt = 0
       @reconnect_timer&.cancel
       @reconnect_timer = nil
+      @forcing_reconnect = false
       schedule_ping
     end
 
@@ -830,15 +839,61 @@ class HaWs
   def schedule_ping
     @ping_timer&.cancel
     @ping_timer = EM.add_periodic_timer(30) do
+      # Staleness watchdog: if HA has gone silent (no event, no pong) past the
+      # limit, the socket is dead despite TCP — force a clean reconnect.
+      if @ws_ready && (Time.now - @last_rx) > STALE_LIMIT
+        log(:warn, :ha_stale_forcing_reconnect, (Time.now - @last_rx).round)
+        force_reconnect
+        next
+      end
       begin
-        @ws&.ping
+        # App-level HA ping (not just a protocol WS ping): HA replies with a
+        # {type: pong} message that surfaces here and refreshes @last_rx, so the
+        # staleness watchdog stays accurate even when the house is quiet and no
+        # state events are flowing.
+        send_json(type: 'ping')
       rescue StandardError
         # ignore
       end
     end
   end
 
+  # Subscribe to HA's startup lifecycle event so we can re-establish clean
+  # subscriptions once the core is fully up (see homeassistant_started handling).
+  def subscribe_lifecycle
+    return if @lifecycle_subscribed
+
+    @lifecycle_subscribed = true
+    send_json(type: 'subscribe_events', event_type: 'homeassistant_started')
+  end
+
+  # Tear down the current socket to trigger the normal reconnect+restore path.
+  # Guarded so overlapping triggers (watchdog + lifecycle) don't loop.
+  def force_reconnect
+    return if @forcing_reconnect
+
+    @forcing_reconnect = true
+    @ws_ready = false
+    dead = @ws
+    begin
+      dead&.close
+    rescue StandardError
+      # ignore; on(:close) will schedule the reconnect
+    end
+    # Backstop: if on(:close) never fired (truly half-dead socket) the same dead
+    # object is still attached and nothing got scheduled — drop it and reconnect
+    # ourselves. If on(:close) already handled it, this is a no-op.
+    EM.add_timer(5) do
+      @forcing_reconnect = false
+      if @ws.equal?(dead) && @reconnect_timer.nil?
+        @ws = nil
+        connect
+      end
+    end
+  end
+
   def handle_message(data)
+    @last_rx = Time.now
     msg = JSON.parse(data)
     log(:debug, :ws_recv, msg)
 
@@ -850,12 +905,26 @@ class HaWs
       set_id_base!
 
       @ws_ready = true
+      @lifecycle_subscribed = false
       log(:info, :ha_ready)
       restore_subscriptions
+      subscribe_lifecycle
       flush_queue
       @on_ready&.call
     when 'event'
-      @on_event&.call(msg)
+      # Intercept HA lifecycle: when the core finishes (re)starting, our current
+      # subscribe_entities may have been established mid-boot (before late
+      # integrations like Midea loaded), leaving those entities silently
+      # uncovered. Force a clean reconnect so every subscription re-establishes
+      # against fully-loaded HA. This is the fix for HVAC feedback going mute
+      # after an HA host restart while lighting kept working.
+      et = msg.dig('event', 'event_type')
+      if et == 'homeassistant_started'
+        log(:info, :ha_started_event_forcing_resubscribe)
+        force_reconnect
+      else
+        @on_event&.call(msg)
+      end
     when 'pong'
       log(:debug, :pong)
     when 'result'
