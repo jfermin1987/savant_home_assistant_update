@@ -579,6 +579,10 @@ class HaWs
   # If we haven't received ANYTHING from HA (event or pong) in this window, the
   # socket is dead even though TCP thinks it's open — force a clean reconnect.
   STALE_LIMIT = 75
+  # HA only accepts real entity_ids (domain.object). A single bad value (e.g. a
+  # bare numeric Savant id like "001") makes HA reject the ENTIRE subscribe
+  # batch, which would drop every subscription — so we resolve + filter first.
+  ENTITY_ID_RE = /\A[a-z][a-z0-9_]*\.[a-z0-9_]+\z/
 
   def initialize(token:, address: DEFAULT_WS)
     @token = token
@@ -617,6 +621,8 @@ class HaWs
   end
 
   attr_reader :subscribed_entities
+  # Set by the proxy: resolves a Savant id / raw token to a real HA entity_id.
+  attr_accessor :resolver
 
   def on_event(&blk) = (@on_event = blk)
   def on_ready(&blk) = (@on_ready = blk)
@@ -644,8 +650,18 @@ class HaWs
 
   def ready? = @ws_ready
 
+  # Resolve tokens to real entity_ids and drop anything HA would reject. Keeping
+  # this strict is what prevents one stale numeric id from nuking the whole
+  # subscribe batch (and with it, every entity's feedback).
+  def sanitize_ids(ids)
+    Array(ids).map { |x| x.to_s.strip }.reject(&:empty?).map do |x|
+      r = @resolver ? @resolver.call(x).to_s.strip : x
+      r.empty? ? x : r
+    end.select { |x| x.match?(ENTITY_ID_RE) }.uniq
+  end
+
   def ensure_subscribed(entity_ids)
-    ids = Array(entity_ids).compact.map(&:to_s).map(&:strip).reject(&:empty?)
+    ids = sanitize_ids(entity_ids)
     return if ids.empty?
 
     new_ids = ids.reject { |e| @subscribed_entities[e] }
@@ -968,11 +984,17 @@ class HaWs
   end
 
   def restore_subscriptions
-    ids = @subscribed_entities.keys
-    log(:info, :restoring_subscriptions, ids.length)
-    return if ids.empty?
+    # Re-resolve and filter: HA rejects the whole batch on one bad id, so drop
+    # any stale numeric/invalid entries. Rebuild the tracked set to the clean
+    # forms so the poison can't linger across future reconnects.
+    clean = sanitize_ids(@subscribed_entities.keys)
+    @subscribed_entities = {}
+    clean.each { |e| @subscribed_entities[e] = true }
 
-    ids.each_slice(RESUB_CHUNK) do |chunk|
+    log(:info, :restoring_subscriptions, clean.length)
+    return if clean.empty?
+
+    clean.each_slice(RESUB_CHUNK) do |chunk|
       send_json(type: 'subscribe_entities', entity_ids: chunk)
     end
   end
@@ -1220,6 +1242,7 @@ class HassProxy
     @pending_discovery_registry = nil
 
     @ha = HaWs.new(token: token, address: address)
+    @ha.resolver = method(:resolve_entity)
     @ha.on_event { |msg| handle_ha_event(msg) }
     @ha.on_ready { on_ha_ready }
   end
