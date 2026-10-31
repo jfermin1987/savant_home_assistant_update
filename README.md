@@ -6,8 +6,15 @@ state from **Home Assistant**. The add-on runs a small Ruby proxy
 Assistant WebSocket API on the other. The matching Savant blueprint profile is
 `hass_savant.xml`.
 
-- **Add-on version:** 1.1.75
+- **Add-on version:** 1.1.82
 - **Savant profile version:** 4.8
+
+> **1.1.82 — ID persistence fix.** The numeric-ID registry is now stored in the
+> add-on's persistent `/data/savant_entity_ids.json`, mirrored to the HA config
+> folder (`/config/savant_entity_ids.json` in File Editor/Samba). Earlier builds
+> lost the registry when the container was recreated (host power loss, reboot,
+> update) and renumbered entities. If the registry is missing at start it is
+> restored from the mirror; if it is unreadable, no IDs are reassigned.
 
 ---
 
