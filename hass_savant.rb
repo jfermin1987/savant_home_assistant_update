@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+# v1.1.82 registry persistence: IDs saved to /data (+ mirror in HA config), survive host reboots/updates
+
 # v1.1.76 entity-registry filtering
 # - Catalog discovery now merges HA get_states with Entity Registry metadata
 # - Excludes entity_category=config/diagnostic
@@ -65,55 +67,123 @@ class EntityIdRegistry
 
   attr_reader :path
 
+  # ---------------------------------------------------------------------------
+  # v1.1.82 PERSISTENCE FIX
+  # Before 1.1.82 the registry was written to /config/savant_entity_ids.json, but
+  # config.yaml never mapped /config into the container. FileUtils.mkdir_p made
+  # /config inside the container's own (ephemeral) layer, so the file survived
+  # an add-on restart but was LOST whenever Supervisor recreated the container
+  # (host power loss/reboot, add-on update/rebuild). On the next start the
+  # registry was empty and every entity was renumbered from scratch, breaking the
+  # Savant data tables.
+  #
+  # Now:
+  # - PRIMARY  = /data/savant_entity_ids.json  (add-on persistent volume; survives
+  #              restarts, host reboots and updates; included in add-on backups)
+  # - MIRROR   = /homeassistant/savant_entity_ids.json (HA config folder, mapped
+  #              via `homeassistant_config:rw`; visible in File Editor/Samba as
+  #              /config/savant_entity_ids.json; included in HA backups)
+  # - On start, if PRIMARY is missing it is IMPORTED from the mirror (or from an
+  #   explicit SAVANT_ENTITY_SEED_FILE) so existing assignments are kept.
+  # - If an existing registry file cannot be read, NEW IDs are frozen (no
+  #   renumbering, no overwrite) until the file is fixed.
+  # ---------------------------------------------------------------------------
+  PRIMARY_PATH = '/data/savant_entity_ids.json'
+  MIRROR_PATH  = '/homeassistant/savant_entity_ids.json'
+
   def self.default_path
-    # /config is shared with Home Assistant and can be reached from Terminal,
-    # File Editor, Samba, Studio Code, etc. Prefer it for field commissioning.
-    candidates = [
-      ENV['SAVANT_ENTITY_MAP_FILE'],
-      '/config/savant_entity_ids.json',
-      '/data/savant_entity_ids.json',
-      '/tmp/savant_entity_ids.json'
-    ].compact.reject(&:empty?)
+    env = ENV['SAVANT_ENTITY_MAP_FILE'].to_s.strip
+    return env unless env.empty?
 
-    candidates.each do |candidate|
-      begin
-        dir = File.dirname(candidate)
-        FileUtils.mkdir_p(dir) unless Dir.exist?(dir)
-        return candidate if File.writable?(dir)
-      rescue StandardError
-        next
-      end
+    PRIMARY_PATH
+  end
+
+  # True only if `dir` (or a parent) is a real mount, i.e. not the container's
+  # throw-away layer.
+  def self.persistent_dir?(dir)
+    mounts = File.read('/proc/mounts').lines.map { |l| l.split[1] }
+    d = File.expand_path(dir)
+    until d == '/'
+      return true if mounts.include?(d)
+      d = File.dirname(d)
     end
-
-    '/tmp/savant_entity_ids.json'
+    false
+  rescue StandardError
+    true # cannot tell; do not raise false alarms
   end
 
   def initialize(path: self.class.default_path)
     @path = path
     @entries = {}       # entity_id => metadata
     @id_to_entity = {}  # "001" => entity_id
+    @frozen = false     # true => never assign/renumber (registry unreadable)
 
-    # One-time migration from the previous private add-on location.
-    legacy = '/data/savant_entity_ids.json'
-    if @path == '/config/savant_entity_ids.json' &&
-       !File.file?(@path) &&
-       File.file?(legacy)
-      begin
-        FileUtils.cp(legacy, @path)
-        log(:info, :entity_id_registry_migrated, legacy, @path)
-      rescue StandardError => e
-        log(:error, :entity_id_registry_migration_error,
-            legacy, @path, e.class.name, e.message)
+    if ENV['RESET_SAVANT_ENTITY_MAP'].to_s == '1'
+      [@path, mirror_path].compact.each do |f|
+        next unless File.file?(f)
+        File.delete(f)
+        log(:warn, :entity_id_registry_reset, f)
       end
-    end
-
-    if ENV['RESET_SAVANT_ENTITY_MAP'].to_s == '1' && File.file?(@path)
-      File.delete(@path)
-      log(:warn, :entity_id_registry_reset, @path)
+    else
+      import_if_missing!
     end
 
     load!
-    log(:info, :entity_id_registry_path, @path)
+
+    unless self.class.persistent_dir?(File.dirname(@path))
+      log(:error, :entity_id_registry_NOT_PERSISTENT, @path,
+          'IDs will be lost when the container is recreated')
+    end
+    log(:info, :entity_id_registry_path, @path, :mirror, mirror_path || 'none')
+    # Keep the mirror in sync with what we actually loaded.
+    write_mirror(File.read(@path)) if File.file?(@path)
+  end
+
+  def frozen? = @frozen
+
+  def mirror_path
+    return nil if @path == MIRROR_PATH
+    dir = File.dirname(MIRROR_PATH)
+    return nil unless Dir.exist?(dir) && File.writable?(dir)
+
+    MIRROR_PATH
+  end
+
+  def import_if_missing!
+    return if File.file?(@path)
+
+    sources = [
+      ENV['SAVANT_ENTITY_SEED_FILE'],
+      MIRROR_PATH,
+      '/homeassistant/savant_entity_ids.seed.json',
+      # Legacy path: only trust it if it is a real mount (old builds wrote it
+      # into the ephemeral container layer).
+      ('/config/savant_entity_ids.json' if self.class.persistent_dir?('/config'))
+    ].compact.map(&:to_s).reject(&:empty?).uniq
+
+    sources.each do |src|
+      next if src == @path
+      next unless File.file?(src)
+
+      begin
+        raw = JSON.parse(File.read(src))
+        ents = raw['entities']
+        unless ents.is_a?(Hash) && !ents.empty?
+          log(:warn, :entity_id_registry_import_skipped_empty, src)
+          next
+        end
+        FileUtils.mkdir_p(File.dirname(@path))
+        FileUtils.cp(src, @path)
+        log(:warn, :entity_id_registry_imported, src, @path, :entities, ents.length)
+        return
+      rescue StandardError => e
+        # A seed exists but is broken: do NOT start from zero, freeze instead.
+        @frozen = true
+        log(:error, :entity_id_registry_import_error, src, e.class.name, e.message,
+            'new IDs frozen until fixed')
+        return
+      end
+    end
   end
 
   def resolve(value)
@@ -191,6 +261,11 @@ class EntityIdRegistry
           end
         end
         existing['last_seen'] = now
+        next
+      end
+
+      if @frozen
+        log(:warn, :entity_id_assignment_frozen, eid)
         next
       end
 
@@ -364,12 +439,19 @@ class EntityIdRegistry
     rebuild_reverse!
     log(:info, :entity_id_registry_loaded, @entries.length, @path)
   rescue StandardError => e
-    log(:error, :entity_id_registry_load_error, @path, e.class.name, e.message)
+    log(:error, :entity_id_registry_load_error, @path, e.class.name, e.message,
+        'new IDs frozen; file left untouched')
     @entries = {}
     @id_to_entity = {}
+    @frozen = true
   end
 
   def save!
+    if @frozen
+      log(:error, :entity_id_registry_save_blocked_frozen, @path)
+      return
+    end
+
     dir = File.dirname(@path)
     FileUtils.mkdir_p(dir) unless Dir.exist?(dir)
 
@@ -379,11 +461,24 @@ class EntityIdRegistry
       'entities' => @entries
     }
     tmp = "#{@path}.tmp"
-    File.write(tmp, JSON.pretty_generate(payload))
+    json = JSON.pretty_generate(payload)
+    File.write(tmp, json)
     File.rename(tmp, @path)
     log(:info, :entity_id_registry_saved, @entries.length, @path)
+    write_mirror(json)
   rescue StandardError => e
     log(:error, :entity_id_registry_save_error, @path, e.class.name, e.message)
+  end
+
+  def write_mirror(json)
+    m = mirror_path
+    return unless m
+
+    tmp = "#{m}.tmp"
+    File.write(tmp, json)
+    File.rename(tmp, m)
+  rescue StandardError => e
+    log(:warn, :entity_id_registry_mirror_error, m, e.class.name, e.message)
   end
 end
 
